@@ -68,7 +68,30 @@ data MStm
     | MReturn   MExpr
     | MEmpty
 instance Pretty MStm where
-    pretty = error "Missing"
+    pretty (MIf p a b)          = string "if" <+> parens (pretty p)
+                                  <//> string "{" <//> nest 1 (pretty a) <//> string "}"
+                                  <//> string "else"
+                                  <//> string "{" <//> nest 1 (pretty a) <//> string "}"
+    pretty (MWhile p a)         = string "while" <+> parens (pretty p)
+                                  <//> string "{" <//> nest 1 (pretty a) <//> string "}"
+    pretty (MFor v i j k a)     = string "for" <+> parens clause
+                                  <//> string "{" <//> nest 1 (pretty a) <//> string "}"
+        where
+            clause = pretty v 
+                <+> string "=" <+> pretty i
+                <+> string "to" <+> pretty j
+                <+> maybe mempty (\k -> string "step" <+> pretty k) k
+    pretty (MForEach t v u a)   = string "for" <+> string "each" <+> parens clause
+                                  <//> string "{" <//> nest 1 (pretty a) <//> string "}"
+        where
+            clause = pretty v 
+                <+> maybe mempty (\t -> pretty t) t
+                <+> pretty v
+                <+> string "in" <+> pretty u
+    pretty (MSwitch b cs d)     = error "TODO"
+    pretty (MAssign n a)        = (pretty n <+> string "=" <+> pretty a) <> string ";"
+    pretty (MReturn a)          = (string "return" <+> pretty a) <> string ";"
+    pretty (MEmpty)             = string ";"
 
 data MExpr
     = MOp1      MOpName MExpr
@@ -84,7 +107,7 @@ instance Pretty MExpr where
     pretty (MOp1 n a)   = pretty n <+> pretty a
     pretty (MOp2 n a b) = pretty a <+> pretty n <+> pretty b
     pretty (MCall n as) = pretty n <> brackets (sepBy (string ", ") $ map pretty as)
-    pretty (MVar e)     = pretty e
+    pretty (MVar n)     = pretty n
     pretty (MStr s)     = string . show $ s
     pretty (MNum a)     = double a
     pretty (MBool a)    = if a then string "true" else string "false"
