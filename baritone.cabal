@@ -1,7 +1,6 @@
 
 name:           baritone
 version:        0.5
-cabal-version:  >= 0.14
 build-type:     Simple
 author:         Hans Hoglund
 synopsis:       Functional syntax for Sibelius ManuScript
@@ -11,7 +10,7 @@ tested-with:    GHC
 
 library                    
     build-depends: 
-        base, semigroups, containers, haskell-src
+        base, semigroups, haskell-src, prettify
     hs-source-dirs: src
     exposed-modules:
         Language.Baritone.Core

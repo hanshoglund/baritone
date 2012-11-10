@@ -1,6 +1,8 @@
 
 module Language.Baritone.Core where
 import Language.Haskell.Syntax
+import Data.Semigroup
+import Text.Pretty
 
 type BName = String -- unqualified
 type BModuleName = [String]
@@ -36,23 +38,22 @@ fromCore = undefined
 -- Core to ManuScript
 -------------------------------------------------------------------------
 
-type MName = String -- unqualified
-
 -- http://www.simkin.co.uk/Docs/java/index.html
+
+type MName = String -- unqualified
 
 data MPlugin
     = MPlugin 
         MName 
         [MPluginDecl]
+instance Pretty MPlugin where
+    pretty = error "Missing"
 
 data MPluginDecl
-    = MGlobal
-        MName
-        MExpr
-    | MMethod 
-        MName   -- name of method
-        [MName] -- vars
-        MExpr
+    = MGlobal MName MExpr           -- name body
+    | MMethod MName [MName] MExpr   -- name vars body
+instance Pretty MPluginDecl where
+    pretty = error "Missing"
 
 type MQName = [MName]
 type MOpName = String
@@ -66,6 +67,8 @@ data MStm
     | MAssign   MVar MExpr
     | MReturn   MExpr
     | MEmpty
+instance Pretty MStm where
+    pretty = error "Missing"
 
 data MExpr
     = MOp1      MOpName MExpr
@@ -77,10 +80,24 @@ data MExpr
     | MBool     Bool
     | MSelf
     | MNull
+instance Pretty MExpr where
+    pretty (MOp1 n a)   = pretty n <+> pretty a
+    pretty (MOp2 n a b) = pretty a <+> pretty n <+> pretty b
+    pretty (MCall n as) = pretty n <> brackets (sepBy (string ", ") $ map pretty as)
+    pretty (MVar e)     = pretty e
+    pretty (MStr s)     = string . show $ s
+    pretty (MNum a)     = double a
+    pretty (MBool a)    = if a then string "true" else string "false"
+    pretty (MSelf)      = string "self"
+    pretty (MNull)      = string "null"
 
 data MVar 
     = MId       MQName
-    | MProp     MQName MExpr
-    | MIndex    MQName MExpr
+    | MProp     MVar MExpr
+    | MIndex    MVar MExpr
+instance Pretty MVar where
+    pretty (MId n)      = pretty n
+    pretty (MProp n a)  = pretty n <> string "." <> pretty a
+    pretty (MIndex n a) = pretty n <> brackets (pretty a)
 
 
