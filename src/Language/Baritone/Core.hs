@@ -47,13 +47,18 @@ data MPlugin
         MName 
         [MPluginDecl]
 instance Pretty MPlugin where
-    pretty = error "Missing"
+    pretty (MPlugin n ds)   = string "//" <+> pretty n 
+                                </> braces (vcat $ map pretty ds)
 
 data MPluginDecl
     = MGlobal MName MExpr           -- name body
-    | MMethod MName [MName] MExpr   -- name vars body
+    | MMethod MName [MName] [MStm]  -- name vars body
 instance Pretty MPluginDecl where
-    pretty = error "Missing"
+    pretty (MGlobal n a)    = pretty n <+> quotes (pretty a) 
+    pretty (MMethod n vs a) = pretty n <+> quotes
+                                (parens (sepBy (string ", ") $ map pretty vs)
+                                </> 
+                                sepBy mempty (map pretty a)) -- or just pretty a
 
 type MQName = [MName]
 type MOpName = String
