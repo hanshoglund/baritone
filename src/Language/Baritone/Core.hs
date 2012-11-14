@@ -2,12 +2,14 @@
 module Language.Baritone.Core where
 import Language.Haskell.Syntax
 import Data.Semigroup
+import Data.List (intersperse)
 import Text.Pretty
 
 type BName = String -- unqualified
 type BModuleName = [String]
-type BImportDecl = (BModuleName, [BName], Maybe BName) -- name hiding alias
-type BValueDecl = (String, BExpr)
+
+data BImportDecl = BImportDecl BModuleName [BName] (Maybe BName) -- name hiding alias
+data BValueDecl = BValueDecl String BExpr
 
 data BModule
     = BModule
@@ -22,8 +24,9 @@ data BExpr
     | BInl String        -- inline ManuScript code
     | BNum Double
     | BStr String
+isBAbs (BAbs _ _) = True
+isBAbs _          = False
 
-    
 -------------------------------------------------------------------------
 -- Haskell to Core
 -------------------------------------------------------------------------
@@ -31,16 +34,51 @@ data BExpr
 toCore :: HsModule -> BModule
 toCore = undefined
 
-fromCore :: BModule -> MPlugin
-fromCore = undefined
-
 -------------------------------------------------------------------------
 -- Core to ManuScript
+-------------------------------------------------------------------------
+
+-- TODO resolve imports and rename
+fromCore :: BModule -> MPlugin
+fromCore (BModule n ds vs) = MPlugin 
+                               (mangleModuleName n)
+                               (map translValueDecl vs)
+
+translValueDecl :: BValueDecl -> MPluginDecl
+translValueDecl (BValueDecl s a) 
+    | isBAbs a      = error "TODO"
+    | otherwise     = error "TODO"
+
+mangleModuleName :: BModuleName -> MName
+mangleModuleName = mconcat . intersperse "_"
+
+fromCoreExpr :: BExpr -> MExpr
+-- Wrong!
+-- If this is a free var, it must be looked up as below
+fromCoreExpr (BVar n)       = MVar (MId [n])
+-- Wrong!
+-- Must pass to a special call routine that checks if f is a generated closure
+-- object as per below
+fromCoreExpr (BApp (f:as))  = MCall (fromCoreExpr f) (map fromCoreExpr as)
+-- Basic procedure: 
+--     * Force generation of method
+--     * Create a dictionary $
+--     * Copy in free vars of a to $
+--     * Use SetMethod to make it callable through the generated method
+fromCoreExpr (BAbs n a)     = error "TODO"
+fromCoreExpr (BNum a)       = MNum a
+fromCoreExpr (BStr s)       = MStr s
+fromCoreExpr (BInl c)       = MInl c
+
+-------------------------------------------------------------------------
+-- ManuScript
 -------------------------------------------------------------------------
 
 -- http://www.simkin.co.uk/Docs/java/index.html
 
 type MName = String -- unqualified
+type MQName = [MName]
+type MOpName = String
 
 data MPlugin
     = MPlugin 
@@ -60,8 +98,6 @@ instance Pretty MPluginDecl where
                                 </> 
                                 sepBy mempty (map pretty a)) -- or just pretty a
 
-type MQName = [MName]
-type MOpName = String
 
 data MStm
     = MIf       MExpr [MStm] [MStm]
@@ -103,6 +139,7 @@ data MExpr
     | MOp2      MOpName MExpr MExpr
     | MCall     MExpr [MExpr]
     | MVar      MVar
+    | MInl      String
     | MStr      String
     | MNum      Double
     | MBool     Bool
@@ -113,6 +150,7 @@ instance Pretty MExpr where
     pretty (MOp2 n a b) = pretty a <+> pretty n <+> pretty b
     pretty (MCall n as) = pretty n <> brackets (sepBy (string ", ") $ map pretty as)
     pretty (MVar n)     = pretty n
+    pretty (MInl c)     = string c
     pretty (MStr s)     = string . show $ s
     pretty (MNum a)     = double a
     pretty (MBool a)    = if a then string "true" else string "false"
