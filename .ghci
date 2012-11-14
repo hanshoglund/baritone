@@ -1,0 +1,4 @@
+
+:m + Language.Baritone.Core
+:m + Text.Pretty
+:set prompt "Baritone> "

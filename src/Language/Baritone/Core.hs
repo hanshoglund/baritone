@@ -18,12 +18,12 @@ data BModule
         [BValueDecl]
 
 data BExpr
-    = BVar BName
-    | BApp [BExpr]
-    | BAbs BName BExpr
-    | BInl String        -- inline ManuScript code
-    | BNum Double
-    | BStr String
+    = BVar BName            -- E(x)          =  x Baritone.lookup(f,x)
+    | BApp [BExpr]          -- E(f x y)      =  E(f).call(E(x), E(y))
+    | BAbs [BName] BExpr    -- E(\x y -> e)  =  "(x,y) { E(E)}"
+    | BInl String           -- inline ManuScript code
+    | BNum Double           -- E(n)          =  n
+    | BStr String           -- E(s)          =  s
 isBAbs (BAbs _ _) = True
 isBAbs _          = False
 
@@ -86,7 +86,7 @@ fromCore (BModule n ds vs) = MPlugin
         fromCoreExpr :: BExpr -> MExpr
         -- Wrong!
         -- If this is a free var, it must be looked up as below
-        fromCoreExpr (BVar n)       = MVar (MId [n])
+        fromCoreExpr (BVar n)       = MVar (MId n)
         -- Wrong!
         -- Must pass to a special call routine that checks if f is a generated closure
         -- object as per below
@@ -108,7 +108,7 @@ fromCore (BModule n ds vs) = MPlugin
 -- http://www.simkin.co.uk/Docs/java/index.html
 
 type MName = String -- unqualified
-type MQName = [MName]
+type MQName = MName -- TODO [MName]
 type MOpName = String
 
 data MPlugin
@@ -141,22 +141,23 @@ data MStm
     | MEmpty
 instance Pretty MStm where
     pretty (MIf p a b)          = string "if" <+> parens (pretty p)
-                                  <//> string "{" <//> nest 1 (pretty a) <//> string "}"
+                                  <//> string "{" <//> indent 1 (pretty a) <//> string "}"
                                   <//> string "else"
-                                  <//> string "{" <//> nest 1 (pretty a) <//> string "}"
+                                  <//> string "{" <//> indent 1 (pretty a) <//> string "}"
     pretty (MWhile p a)         = string "while" <+> parens (pretty p)
-                                  <//> string "{" <//> nest 1 (pretty a) <//> string "}"
+                                  <//> string "{" <//> indent 1 (vcat $ map pretty a) <//> string "}"
     pretty (MFor v i j k a)     = string "for" <+> parens clause
-                                  <//> string "{" <//> nest 1 (pretty a) <//> string "}"
+                                  <//> string "{" <//> indent 1 (vcat $ map pretty a) <//> string "}"
         where
-            clause = pretty v 
+            clause = mempty
+                <+> pretty v 
                 <+> string "=" <+> pretty i
                 <+> string "to" <+> pretty j
                 <+> maybe mempty (\k -> string "step" <+> pretty k) k
-    pretty (MForEach t v u a)   = string "for" <+> string "each" <+> parens clause
-                                  <//> string "{" <//> nest 1 (pretty a) <//> string "}"
+    pretty (MForEach t v u a)   = string "for" <+> string "each" <+> clause
+                                  <//> string "{" <//> indent 1 (vcat $ map pretty a) <//> string "}"
         where
-            clause = pretty v 
+            clause = mempty 
                 <+> maybe mempty (\t -> pretty t) t
                 <+> pretty v
                 <+> string "in" <+> pretty u
@@ -178,8 +179,8 @@ data MExpr
     | MNull
 instance Pretty MExpr where
     pretty (MOp1 n a)   = pretty n <+> pretty a
-    pretty (MOp2 n a b) = pretty a <+> pretty n <+> pretty b
-    pretty (MCall n as) = pretty n <> brackets (sepBy (string ", ") $ map pretty as)
+    pretty (MOp2 n a b) = pretty a <+> string n <+> pretty b
+    pretty (MCall n as) = pretty n <> parens (sepBy (string ", ") $ map pretty as)
     pretty (MVar n)     = pretty n
     pretty (MInl c)     = string c
     pretty (MStr s)     = string . show $ s
@@ -193,8 +194,12 @@ data MVar
     | MProp     MVar MExpr
     | MIndex    MVar MExpr
 instance Pretty MVar where
-    pretty (MId n)      = pretty n
+    pretty (MId n)      = string n
     pretty (MProp n a)  = pretty n <> string "." <> pretty a
     pretty (MIndex n a) = pretty n <> brackets (pretty a)
+
+
+
+indent n = nest (4 * n)
 
 
