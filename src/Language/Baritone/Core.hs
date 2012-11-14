@@ -42,14 +42,27 @@ toCore (HsModule l n es is as) = undefined
 
         translateExport :: HsExportSpec -> ()
         translateExport = error "Not impl"
+        -- TODO handle export spec (by renaming?)
         
         translateImport :: HsImportSpec -> ()
         translateImport = error "Not impl"
         
         translateDecl :: HsDecl -> BValueDecl
-        translateDecl = error "Not impl"
-        -- TODO handle export spec (by renaming?)
+        translateDecl (HsTypeDecl l n vs t)             = notSupported
+        translateDecl (HsDataDecl l c n vs cs ns)       = notSupported
+        translateDecl (HsNewTypeDecl l c n vs cs ns)    = notSupported
+        translateDecl (HsInfixDecl l a f o)             = notSupported
+        translateDecl (HsClassDecl l c n ns ds)         = notSupported
+        translateDecl (HsInstDecl l c t ts ds)          = notSupported
+        translateDecl (HsDefaultDecl l ts)              = notSupported
+        translateDecl (HsForeignImport s h f m n t)     = notSupported
+        translateDecl (HsForeignExport s h m n t)       = notSupported
+        translateDecl (HsTypeSig l ns t)                = notSupported
 
+        -- translateDecl (HsFunBind)
+        -- translateDecl (HsPatBind)
+                
+        notSupported = error "This Haskell feature is not supported"
 
 -------------------------------------------------------------------------
 -- Core to ManuScript
