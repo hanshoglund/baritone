@@ -32,7 +32,24 @@ isBAbs _          = False
 -------------------------------------------------------------------------
 
 toCore :: HsModule -> BModule
-toCore = undefined
+toCore (HsModule l n es is as) = undefined
+
+    where
+        translateName :: Module -> BModuleName
+        translateName (Module n) = [n]
+        -- TODO handle dot separator
+        -- TODO handle unicode?
+
+        translateExport :: HsExportSpec -> ()
+        translateExport = error "Not impl"
+        
+        translateImport :: HsImportSpec -> ()
+        translateImport = error "Not impl"
+        
+        translateDecl :: HsDecl -> BValueDecl
+        translateDecl = error "Not impl"
+        -- TODO handle export spec (by renaming?)
+
 
 -------------------------------------------------------------------------
 -- Core to ManuScript
@@ -42,34 +59,35 @@ toCore = undefined
 fromCore :: BModule -> MPlugin
 fromCore (BModule n ds vs) = MPlugin 
                                (mangleModuleName n)
-                               (map translValueDecl vs)
+                               (map translateValueDecl vs)
+    where
 
-translValueDecl :: BValueDecl -> MPluginDecl
-translValueDecl (BValueDecl s a) 
-    | isBAbs a      = error "TODO"
-    | otherwise     = error "TODO"
+        translateValueDecl :: BValueDecl -> MPluginDecl
+        translateValueDecl (BValueDecl s a) 
+            | isBAbs a      = error "TODO"
+            | otherwise     = error "TODO"
 
-mangleModuleName :: BModuleName -> MName
-mangleModuleName = mconcat . intersperse "_"
+        mangleModuleName :: BModuleName -> MName
+        mangleModuleName = mconcat . intersperse "_"
 
-fromCoreExpr :: BExpr -> MExpr
--- Wrong!
--- If this is a free var, it must be looked up as below
-fromCoreExpr (BVar n)       = MVar (MId [n])
--- Wrong!
--- Must pass to a special call routine that checks if f is a generated closure
--- object as per below
-fromCoreExpr (BApp (f:as))  = MCall (fromCoreExpr f) (map fromCoreExpr as)
--- Basic procedure: 
---     * Force generation of method
---     * Create a dictionary $
---     * Copy in free vars of a to $
---     * Use SetMethod to make it callable through the generated method
-fromCoreExpr (BAbs n a)     = error "TODO"
-fromCoreExpr (BNum a)       = MNum a
-fromCoreExpr (BStr s)       = MStr s
-fromCoreExpr (BInl c)       = MInl c
-
+        fromCoreExpr :: BExpr -> MExpr
+        -- Wrong!
+        -- If this is a free var, it must be looked up as below
+        fromCoreExpr (BVar n)       = MVar (MId [n])
+        -- Wrong!
+        -- Must pass to a special call routine that checks if f is a generated closure
+        -- object as per below
+        fromCoreExpr (BApp (f:as))  = MCall (fromCoreExpr f) (map fromCoreExpr as)
+        -- Basic procedure: 
+        --     * Force generation of method
+        --     * Create a dictionary $
+        --     * Copy in free vars of a to $
+        --     * Use SetMethod to make it callable through the generated method
+        fromCoreExpr (BAbs n a)     = error "TODO"
+        fromCoreExpr (BNum a)       = MNum a
+        fromCoreExpr (BStr s)       = MStr s
+        fromCoreExpr (BInl c)       = MInl c 
+                                          
 -------------------------------------------------------------------------
 -- ManuScript
 -------------------------------------------------------------------------
