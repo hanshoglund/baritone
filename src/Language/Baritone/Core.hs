@@ -229,49 +229,47 @@ fromCore (BModule n is as)
 
         transValueDecl :: BValue -> MGen ()
         transValueDecl (BValue s a) = do
-            a' <- transExp (fixPrimOps a)
+            a' <- transExp True (fixPrimOps a)
             addGlobal s a'
             return ()
 
 
+        transExp :: Bool -> BExp -> MGen MExp
+        transExp isTop (BVar n) = do
+            return $ MVar (MProp (MVar $ MId ctName) n)
 
-        transExp :: BExp -> MGen MExp
-        transExp (BVar n) = do
-            return $ MVar (MProp (MVar $ MId "_c") n)
+        transExp isTop (BApp f as) = do
+            f'  <- transExp False f
+            as' <- mapM (transExp False) as
+            return $ MCall (MVar $ MProp f' apName) as'
 
-        transExp (BApp f as) = do
-            f'  <- transExp f
-            as' <- mapM transExp as
-            return $ MCall (MVar $ MProp f' "_a") as'
-
-        transExp (BAbs ns a) = do
-            a' <- transExp a
+        transExp isTop (BAbs ns a) = do
+            let context = if isTop then MSelf else MVar (MId ctName)
+            a' <- transExp False a
             invoke <- let         
-                vars = ["_c"] ++ ns
+                vars = [ctName] ++ ns
                 body = 
-                    map (\n -> MAssign (MProp (MVar $ MId "_c") n) (MVar $ MId n)) ns 
+                    map (\n -> MAssign (MPropDef (MVar $ MId ctName) n) (MVar $ MId n)) ns 
                     ++
                     [MReturn a']
                 in addUniqueMethod vars body
             create <- let
-                vars = ["_c"]
+                vars = [ctName]
                 alloc = [
-                    MAssign (MId "_k") (MCall (MVar $ MId "CreateDictionary") [])
+                    MAssign (MId allocName) (MCall (MVar $ MId "CreateDictionary") [MStr "dummy", MStr "dummy"])
                     ]
-                copy = map (\n -> MAssign (MProp (MVar $ MId "_k") n) (MVar $ (MProp (MVar $ MId "_c") n))) (freeVars a \\ ns) 
-
-                -- FIXME should only be self in a top-level binding
-                -- maybe use _c and assign that to self in Initialize?
+                copy = map (\n -> MAssign (MPropDef (MVar $ MId allocName) n) (MVar $ (MProp (MVar $ MId ctName) n))) (freeVars a \\ ns) 
                 ret = [
-                    MExp (MCall (MVar $ MProp (MVar $ MId "_k") "SetMethod") [MStr "_a", MSelf, MVar (MId invoke)]),
-                    MReturn (MVar $ MId "_k")
+                    MExp (MCall (MVar $ MProp (MVar $ MId allocName) "SetMethod") 
+                        [MStr apName, MSelf, MStr invoke]),
+                    MReturn (MVar $ MId allocName)
                     ]
                 in addUniqueMethod vars (alloc ++ copy ++ ret)
-            return $ MCall (MVar $ MId create) [MSelf]
+            return $ MCall (MVar $ MId create) [context]
 
-        transExp (BNum a) = return $ MNum a
-        transExp (BStr s) = return $ MStr s
-        transExp (BInl c) = return $ MInl c
+        transExp _ (BNum a) = return $ MNum a
+        transExp _ (BStr s) = return $ MStr s
+        transExp _ (BInl c) = return $ MInl c
 
 
         fixPrimOps :: BExp -> BExp
@@ -281,26 +279,30 @@ fromCore (BModule n is as)
         fixPrimOps x           = x
 
         primOp :: BName -> BName
-        primOp "(+)" = "_add"
-        primOp "(-)" = "_sub"
-        primOp "(*)" = "_mul"
-        primOp "(/)" = "_div"
+        primOp "(+)" = "add"
+        primOp "(-)" = "sub"
+        primOp "(*)" = "mul"
+        primOp "(/)" = "div"
         primOp x     = x
+        
+        ctName    = "current"
+        allocName = "new"
+        apName    = "Apply"
         
         -- FIXME has to be proper functions
         
         main :: [MDecl]
         main = [
-                MMethod "Run" [] [MExp $ MCall (MVar $ MProp (MVar $ MId "main") "_a") []]
+                MMethod "Run" [] [MExp $ MCall (MVar $ MProp (MVar $ MId "main") apName) []]
             ]
         
         primOps :: [MDecl]
         primOps 
             = [ 
-                MMethod "_add"   ["a", "b"] [MReturn $ MOp2 "+" (MVar $ MId "a") (MVar $ MId "b")],
-                MMethod "_sub"   ["a", "b"] [MReturn $ MOp2 "-" (MVar $ MId "a") (MVar $ MId "b")],
-                MMethod "_mul"   ["a", "b"] [MReturn $ MOp2 "*" (MVar $ MId "a") (MVar $ MId "b")],
-                MMethod "_div"   ["a", "b"] [MReturn $ MOp2 "/" (MVar $ MId "a") (MVar $ MId "b")]
+                MMethod "add"   ["a", "b"] [MReturn $ MOp2 "+" (MVar $ MId "a") (MVar $ MId "b")],
+                MMethod "sub"   ["a", "b"] [MReturn $ MOp2 "-" (MVar $ MId "a") (MVar $ MId "b")],
+                MMethod "mul"   ["a", "b"] [MReturn $ MOp2 "*" (MVar $ MId "a") (MVar $ MId "b")],
+                MMethod "div"   ["a", "b"] [MReturn $ MOp2 "/" (MVar $ MId "a") (MVar $ MId "b")]
               ]
 
 -------------------------------------------------------------------------
