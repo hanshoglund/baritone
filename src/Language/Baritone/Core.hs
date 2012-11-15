@@ -80,9 +80,9 @@ pretty' x | isBApp x  = parens (pretty x)
 -- | Compile a Haskell module into a Baritone module.
 toCore :: HsModule -> BModule
 toCore (HsModule l n es is as)
-    = BModule 
-        (transModName n) 
-        (map transImSpec is) 
+    = BModule
+        (transModName n)
+        (map transImSpec is)
         (map transDec as)
 
     where
@@ -196,25 +196,25 @@ toCore (HsModule l n es is as)
 
 -- | Compile a Baritone module into a ManuScript plugin.
 fromCore :: BModule -> MPlugin
-fromCore (BModule n is as) 
+fromCore (BModule n is as)
     = MPlugin
         (transModName n)
         (foldGlobals . execMGen $ mapM transValueDecl as >> return ())
 
-    where               
+    where
 
         -- | Rewrite globals as self._property assignment
         foldGlobals :: [MDecl] -> [MDecl]
         foldGlobals xs = handleGlobals gs ++ ms
             where
                 (gs, ms) = partition isMGlobal xs
-                
+
                 handleGlobals :: [MDecl] -> [MDecl]
                 handleGlobals x = [MMethod "Initialize" [] (mconcat $ map toSelfAssign x)]
-                
+
                 toSelfAssign :: MDecl -> [MStm]
                 toSelfAssign (MGlobal n a) = [MAssign (MPropDef MSelf n) a]
-        
+
         transModName :: BModuleName -> MName
         transModName = concatWith "_"
 
@@ -223,33 +223,51 @@ fromCore (BModule n is as)
             a' <- transExp a
             addGlobal s a'
             return ()
-            
+
+
+
         transExp :: BExp -> MGen MExp
         transExp (BVar n)      = do
-            return $ MVar (MId n)        
-        
+            return $ MVar (MId n)
+
         transExp (BApp f as) = do
             f'  <- transExp . fixPrimOps $ f
             as' <- mapM transExp as
-            return $ MCall (MVar $ MProp f' "call") as'
+            return $ MCall (MVar $ MProp f' "_a") as'
 
         transExp (BAbs ns a)     = do
-            m <- addUniqueMethod [] [MExp $ MCall (MVar $ MId "trace") [MStr "Called method!"]] -- TODO
-            return $ MCall (MVar $ MId m) []
+            a' <- transExp a
+            invoke <- let         
+                vars = ["_c"] ++ ns
+                body = [MReturn a']
+                in addUniqueMethod vars body
+            create <- let
+                vars = ["_c"]
+                body = [
+                    MAssign (MId "_k") (MCall (MVar $ MId "CreateDictionary") []),
+                    -- TODO copy free vars
+                    MExp (MCall (MVar $ MProp (MVar $ MId "_k") "SetMethod") [MStr "_a", MSelf, MVar (MId invoke)]),
+                    MReturn (MVar $ MId "_k")
+                    ]
+                in addUniqueMethod vars body
+            return $ MCall (MVar $ MId create) []
 
         transExp (BNum a) = return $ MNum a
         transExp (BStr s) = return $ MStr s
         transExp (BInl c) = return $ MInl c
 
+
+
+
         fixPrimOps :: BExp -> BExp
         fixPrimOps (BVar f) = (BVar $ primOp f)
         fixPrimOps x        = x
-        
+
         primOp :: BName -> BName
-        primOp "(+)" = "__add"
-        primOp "(-)" = "__sub"
-        primOp "(*)" = "__mul"
-        primOp "(/)" = "__div"
+        primOp "(+)" = "_add"
+        primOp "(-)" = "_sub"
+        primOp "(*)" = "_mul"
+        primOp "(/)" = "_div"
         primOp x     = x
 
 -------------------------------------------------------------------------
@@ -308,19 +326,18 @@ data MVar
     deriving (Show, Eq)
 instance Pretty MPlugin where
     pretty (MPlugin n ds)   = string "//" <+> pretty n
-                                </> braces (vcat $ map pretty ds)
+                                <//> string "{"  
+                                <//> vcat (map pretty ds)
+                                <//> string "}"
 
 instance Pretty MDecl where
     pretty (MGlobal n a)    = string n <+> doubleQuotes (asStr a)
         where
             asStr (MStr s) = string s
             asStr a        = pretty a
-    pretty (MMethod n vs a) = string n </> indent 1 (doubleQuotes
-                                (parens (sepBy (string ", ") $ map string vs)
-                                    <//>
-                                 (braces . indent 1) (mempty
-                                    <//> vcat (map pretty a))
-                                    <//> mempty))
+    pretty (MMethod n vs a) = string n <+> string "\"" <-> parens (sepBy (string ", ") $ map string vs) <+> string "{"
+                                    <//> indent 2 (vcat $ map pretty a) 
+                                    <//> indent 1 (string "}" <-> string "\"") 
 
 instance Pretty MStm where
     pretty (MIf p a b)          = string "if" <+> parens (pretty p)
@@ -391,7 +408,7 @@ addMethod n vs as = do
 addUniqueMethod :: [MName] -> [MStm] -> MGen MName
 addUniqueMethod vs as = do
     c <- get
-    put (succ c)   
+    put (succ c)
     let n = "__" ++ show c
     tell [MMethod n vs as]
     return n
@@ -399,7 +416,7 @@ addUniqueMethod vs as = do
 execMGen :: MGen () -> [MDecl]
 execMGen x = evalState (execWriterT x) 0
 
--------------------------------------------------------------------------                       
+-------------------------------------------------------------------------
 
 
 
