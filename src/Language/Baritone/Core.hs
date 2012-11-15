@@ -51,7 +51,12 @@ deriving instance Show BExp
 
 -- | Compile a Haskell module into a Baritone module.
 toCore :: HsModule -> BModule
-toCore (HsModule l n es is as) = undefined
+toCore (HsModule l n es is as) 
+    = BModule 
+        (translateModuleName n)
+        (map translateImport is)
+        (map translateDecl as)
+        
 
     where
         translateModuleName :: Module -> BModuleName
@@ -61,7 +66,7 @@ toCore (HsModule l n es is as) = undefined
         translateExport = notSupported
         -- TODO handle export spec (by renaming?)
         
-        translateImport :: HsImportSpec -> ()
+        translateImport :: HsImportDecl -> BImportDecl
         translateImport = notSupported
         -- TODO name resolution/mangling
         
@@ -125,8 +130,10 @@ toCore (HsModule l n es is as) = undefined
         translateExpr (HsWildCard)              = notSupported
         translateExpr (HsIrrPat a)              = notSupported
         
+        
         translatePattern :: HsPat -> BName
         translatePattern (HsPVar n) = getHsName n
+        translatePattern _          = notSupported
         -- TODO proper matching
         
         translateQName :: HsQName -> BExp

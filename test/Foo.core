@@ -1,0 +1,1 @@
+BModule ["Foo"] [] [BValueDecl "one" (BNum 1.0),BValueDecl "name" (BStr "hans"),BValueDecl "char" (BStr "c"),BValueDecl "id" (BAbs ["x","y","z"] (BVar "x")),BValueDecl "const" (BAbs ["y"] (BVar "x"))]
