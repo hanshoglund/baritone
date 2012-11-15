@@ -4,6 +4,8 @@
 module Language.Baritone.Core where
 
 import Language.Haskell.Syntax
+import Control.Monad.Writer hiding ((<>))
+import Control.Monad.State
 import Data.Semigroup
 import Data.List (intersperse)
 import Data.List.Split (splitOn)
@@ -13,15 +15,15 @@ import Text.Pretty
 type BName = String -- unqualified
 type BModuleName = [String]
 
-data BImportDecl 
-    = BImportDecl 
-        BModuleName 
-        [BName] 
+data BImportDecl
+    = BImportDecl
+        BModuleName
+        [BName]
         (Maybe BName) -- name hiding alias
 
-data BValueDecl = 
-    BValueDecl 
-        String 
+data BValueDecl =
+    BValueDecl
+        String
         BExp
 
 data BModule
@@ -48,7 +50,7 @@ deriving instance Show BModule
 deriving instance Show BExp
 
 instance Pretty BImportDecl where
-    pretty (BImportDecl n hs a) = string "import" 
+    pretty (BImportDecl n hs a) = string "import"
                                     <+> string "hiding" <+> parens (sepBy (string ",") $ map pretty hs)
                                     <+> string "as" <+> maybe mempty string a
 instance Pretty BValueDecl where
@@ -63,13 +65,13 @@ instance Pretty BModule where
 instance Pretty BExp where
     pretty (BVar n)     = string n
     pretty (BApp as)    = hsep (map pretty' as)
-    pretty (BAbs ns a)  = (string "\\" <-> hsep (map string ns) <+> string "->") 
+    pretty (BAbs ns a)  = (string "\\" <-> hsep (map string ns) <+> string "->")
                             <+> pretty a
     pretty (BInl s)     = string "inline" <+> string s
-    pretty (BNum n)     = string (show n)               
+    pretty (BNum n)     = string (show n)
     pretty (BStr s)     = string (show s)
 
-pretty' x | isBApp x  = parens (pretty x)    
+pretty' x | isBApp x  = parens (pretty x)
           | otherwise = pretty x
 -------------------------------------------------------------------------
 -- Haskell to Core
@@ -77,12 +79,12 @@ pretty' x | isBApp x  = parens (pretty x)
 
 -- | Compile a Haskell module into a Baritone module.
 toCore :: HsModule -> BModule
-toCore (HsModule l n es is as) 
-    = BModule 
+toCore (HsModule l n es is as)
+    = BModule
         (translateModuleName n)
         (map translateImport is)
         (map translateDecl as)
-        
+
 
     where
         translateModuleName :: Module -> BModuleName
@@ -91,11 +93,11 @@ toCore (HsModule l n es is as)
         translateExport :: HsExportSpec -> ()
         translateExport = notSupported
         -- TODO handle export spec (by renaming?)
-        
+
         translateImport :: HsImportDecl -> BImportDecl
         translateImport = notSupported
         -- TODO name resolution/mangling
-        
+
         translateDecl :: HsDecl -> BValueDecl
         translateDecl (HsPatBind l p a ws)              = translatePatBind p a ws
         translateDecl (HsFunBind [HsMatch l n ps a ws]) = translateFunBind n ps a ws
@@ -105,14 +107,14 @@ toCore (HsModule l n es is as)
         translatePatBind :: HsPat -> HsRhs -> [HsDecl] -> BValueDecl
         translatePatBind p a ws = BValueDecl (translatePattern p) (translateRhs a)
         -- TODO with clause
-        
+
         translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BValueDecl
         translateFunBind n ps a ws = BValueDecl (getHsName n) (BAbs (map translatePattern ps) (translateRhs a))
 
         translateRhs :: HsRhs -> BExp
         translateRhs (HsUnGuardedRhs a) = translateExpr a
         translateRhs _                  = notSupported
-        
+
 
 
         translateExpr :: HsExp -> BExp
@@ -126,7 +128,7 @@ toCore (HsModule l n es is as)
         translateExpr (HsLeftSection a f)       = BApp [wrapOp . translateQName . getHsQOp $ f, translateExpr a]
         translateExpr (HsRightSection f a)      = BApp [wrapOp . translateQName . getHsQOp $ f, translateExpr a]
         translateExpr (HsLambda l ps as)        = BAbs (map translatePattern ps) (translateExpr as)
-        
+
         -- literals
         translateExpr (HsLit l)                 = translateLiteral l
 
@@ -155,13 +157,13 @@ toCore (HsModule l n es is as)
         translateExpr (HsAsPat n a)             = notSupported
         translateExpr (HsWildCard)              = notSupported
         translateExpr (HsIrrPat a)              = notSupported
-        
-        
+
+
         translatePattern :: HsPat -> BName
         translatePattern (HsPVar n) = getHsName n
         translatePattern _          = notSupported
         -- TODO proper matching
-        
+
         translateQName :: HsQName -> BExp
         translateQName (Qual m n)                = notSupported -- TODO
         translateQName (UnQual n)                = BVar (getHsName n)
@@ -170,22 +172,22 @@ toCore (HsModule l n es is as)
         translateQName (Special (HsTupleCon n))  = notSupported
         translateQName (Special HsFunCon)        = notSupported
         translateQName (Special HsCons)          = notSupported
-                
+
         translateLiteral :: HsLiteral -> BExp
         translateLiteral (HsChar c)     = BStr [c]
         translateLiteral (HsString s)	= BStr s
         translateLiteral (HsInt i)	    = BNum (fromIntegral i)
         translateLiteral (HsFrac r)	    = BNum (fromRational r)
         translateLiteral _              = notSupported
-        
+
         getHsQOp (HsQVarOp n)  = n
         getHsQOp (HsQConOp n)  = n
         getHsName (HsIdent n)  = n
         getHsName (HsSymbol n) = n
-        
+
         wrapOp (BVar x) = BVar $ "(" ++ x ++ ")"
         wrapOp x        = x
-                
+
         notSupported = error "This Haskell feature is not supported"
 
 -------------------------------------------------------------------------
@@ -194,55 +196,79 @@ toCore (HsModule l n es is as)
 
 -- | Compile a Baritone module into a ManuScript plugin.
 fromCore :: BModule -> MPlugin
-fromCore (BModule n ds vs) = MPlugin 
-                               (mangleModuleName n)
-                               (map translateValueDecl vs)
+fromCore (BModule n is as) = MPlugin
+                               (translateModuleName n)
+                               (execMGen $ mapM translateValueDecl as >> return ())
+
     where
+        translateModuleName :: BModuleName -> MName
+        translateModuleName = concatWith "_"
 
-        -- TODO resolve imports and rename
+        translateValueDecl :: BValueDecl -> MGen ()
+        translateValueDecl (BValueDecl s a) = do
+            a' <- fromCoreExpr a
+            addGlobal s a'
+            return ()
 
+        fromCoreExpr :: BExp -> MGen MExp
+        fromCoreExpr (BVar n)      = do
+            return $ MVar (MId n)        
+        
+        fromCoreExpr (BApp (f:as)) = do
+            f'  <- fromCoreExpr f
+            as' <- mapM fromCoreExpr as
+            return $ MCall f' as'
 
-        translateValueDecl :: BValueDecl -> MPluginDecl
-        translateValueDecl (BValueDecl s a) 
-            | isBAbs a      = error "TODO"
-            | otherwise     = error "TODO"
+        fromCoreExpr (BAbs n a)     = do
+            return $ MInl "CreateDictionary()"
 
-        mangleModuleName :: BModuleName -> MName
-        mangleModuleName = concatWith "_"
+        fromCoreExpr (BNum a) = return $ MNum a
+        fromCoreExpr (BStr s) = return $ MStr s
+        fromCoreExpr (BInl c) = return $ MInl c
 
-        fromCoreExpr :: BExp -> MExp
-        -- If n is free in this context, just generate x
-        -- otherwise, generate Baritone.lookup(c,x)
-        fromCoreExpr (BVar n)       = MVar (MId n)
-        --    Generate
-        --      f.call(x)
-        fromCoreExpr (BApp (f:as))  = MCall (fromCoreExpr f) (map fromCoreExpr as)
-        --    Cause generation of method M
-        --    Generate code to
-        --     * Create a dictionary D
-        --     * Copy in free vars of as to D
-        --     * Call D.SetMethod(M,'call',as)
-        fromCoreExpr (BAbs n a)     = error "TODO"
-        fromCoreExpr (BNum a)       = MNum a
-        fromCoreExpr (BStr s)       = MStr s
-        fromCoreExpr (BInl c)       = MInl c 
-                                          
 -------------------------------------------------------------------------
 -- ManuScript
 -------------------------------------------------------------------------
 
 -- http://www.simkin.co.uk/Docs/java/index.html
 
+-- |
+-- Plugin generation monad including:
+--  * A state for counting the number of generated functions
+--  * A writer for collecting the generated functions
+type MGen = WriterT [MPluginDecl] (State Int)
+
+addGlobal :: MName -> MExp -> MGen ()
+addGlobal n e = do
+    tell [MGlobal n e]
+    return ()
+
+addMethod :: MName -> [MName] -> [MStm] -> MGen ()
+addMethod n vs as = do
+    tell [MMethod n vs as]
+    return ()
+
+addUniqueMethod :: [MName] -> [MStm] -> MGen MName
+addUniqueMethod vs as = do
+    c <- get
+    put (succ c)   
+    let n = "__" ++ show c
+    tell [MMethod n vs as]
+    return n
+
+execMGen :: MGen () -> [MPluginDecl]
+execMGen x = evalState (execWriterT x) 0
+
 type MName = String    -- unqualified
 type MOpName = String
 
 data MPlugin
-    = MPlugin 
-        MName 
+    = MPlugin
+        MName
         [MPluginDecl]
     deriving (Show, Eq)
 instance Pretty MPlugin where
-    pretty (MPlugin n ds)   = string "//" <+> pretty n 
+    pretty (MPlugin n ds)   = string "//" <+> pretty n
                                 </> braces (vcat $ map pretty ds)
 
 data MPluginDecl
@@ -250,10 +276,10 @@ data MPluginDecl
     | MMethod MName [MName] [MStm]  -- name vars body
     deriving (Show, Eq)
 instance Pretty MPluginDecl where
-    pretty (MGlobal n a)    = pretty n <+> quotes (pretty a) 
+    pretty (MGlobal n a)    = pretty n <+> quotes (pretty a)
     pretty (MMethod n vs a) = pretty n <+> quotes
                                 (parens (sepBy (string ", ") $ map pretty vs)
-                                    </> 
+                                    </>
                                     sepBy mempty (map pretty a)) -- or just pretty a
 
 
@@ -278,7 +304,7 @@ instance Pretty MStm where
 
     pretty (MFor v i j k a)     = string "for" <+> parens clause
                                   <//> string "{" <//> indent 1 (vcat $ map pretty a) <//> string "}"
-        where clause            = pretty v 
+        where clause            = pretty v
                                   <+> string "=" <+> pretty i
                                   <+> string "to" <+> pretty j
                                   <+> maybe mempty (\k -> string "step" <+> pretty k) k
@@ -319,7 +345,7 @@ instance Pretty MExp where
     pretty (MSelf)      = string "self"
     pretty (MNull)      = string "null"
 
-data MVar 
+data MVar
     = MId       MName
     | MProp     MVar MName -- ^ @a.n@
     | MPropDef  MVar MName -- ^ @a._property:n@

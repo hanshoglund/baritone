@@ -16,7 +16,18 @@ compileFile :: Handle -> Handle -> IO ()
 compileFile input output = do
     s <- hGetContents input
     let (ParseOk hs) = parseModule s
-    let b = toCore hs
-    hPutStr output $ (show . pretty) b
+    let b  = toCore hs
+    let ms = fromCore b
+    
+    hPutStr output $ show (pretty b)
     hPutStr output "\n"
+    hPutStr output "\n"
+
+    hPutStr output "----------------------------------------"
+    hPutStr output "\n"
+    hPutStr output "\n"
+
+    hPutStr output $ show (pretty ms)
+    hPutStr output "\n"
+    
     return ()
