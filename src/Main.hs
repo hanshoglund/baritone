@@ -19,13 +19,13 @@ compileFile input output = do
     let b  = toCore hs
     let ms = fromCore b
     
-    hPutStr output $ show (pretty b)
-    hPutStr output "\n"
-    hPutStr output "\n"
-
-    hPutStr output "----------------------------------------"
-    hPutStr output "\n"
-    hPutStr output "\n"
+    -- hPutStr output $ show (pretty b)
+    -- hPutStr output "\n"
+    -- hPutStr output "\n"
+    -- 
+    -- hPutStr output "----------------------------------------"
+    -- hPutStr output "\n"
+    -- hPutStr output "\n"
 
     hPutStr output $ show (pretty ms)
     hPutStr output "\n"

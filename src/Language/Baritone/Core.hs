@@ -133,9 +133,9 @@ toCore (HsModule l n es is as)
         transExp (HsVar n)                 = transQName n
         transExp (HsApp f a)               = BApp (transExp f) [transExp a]
         transExp (HsNegApp a)              = BApp (BInl "(-)") [transExp a]
-        transExp (HsInfixApp a f b)        = BApp (wrapOp . transQName . getHsQOp $ f) [transExp a, transExp b]
-        transExp (HsLeftSection a f)       = BApp (wrapOp . transQName . getHsQOp $ f) [transExp a]
-        transExp (HsRightSection f a)      = BApp (wrapOp . transQName . getHsQOp $ f) [transExp a]
+        transExp (HsInfixApp a f b)        = BApp (transQName . getHsQOp $ f) [transExp a, transExp b]
+        transExp (HsLeftSection a f)       = BApp (transQName . getHsQOp $ f) [transExp a]
+        transExp (HsRightSection f a)      = BApp (transQName . getHsQOp $ f) [transExp a]
         transExp (HsLambda l ps as)        = BAbs (map transPat ps) (transExp as)
 
         -- literals
@@ -194,8 +194,8 @@ toCore (HsModule l n es is as)
         getHsName (HsIdent n)  = n
         getHsName (HsSymbol n) = n
 
-        wrapOp (BVar x) = BVar $ "(" ++ x ++ ")"
-        wrapOp x        = x
+        -- wrapOp (BVar x) = BVar $ "(" ++ x ++ ")"
+        -- wrapOp x        = x
 
         notSupported = error "This Haskell feature is not supported"
 
@@ -256,7 +256,7 @@ fromCore (BModule n is as)
             create <- let
                 vars = [ctName]
                 alloc = [
-                    MAssign (MId allocName) (MCall (MVar $ MId "CreateDictionary") [MStr "dummy", MStr "dummy"])
+                    MAssign (MId allocName) (MCall (MVar $ MId "CreateDictionary") [])
                     ]
                 copy = map (\n -> MAssign (MPropDef (MVar $ MId allocName) n) (MVar $ (MProp (MVar $ MId ctName) n))) (freeVars a \\ ns) 
                 ret = [
@@ -279,15 +279,19 @@ fromCore (BModule n is as)
         fixPrimOps x           = x
 
         primOp :: BName -> BName
-        primOp "(+)" = "add"
-        primOp "(-)" = "sub"
-        primOp "(*)" = "mul"
-        primOp "(/)" = "div"
+        primOp "(+)" = "__add"
+        primOp "(-)" = "__sub"
+        primOp "(*)" = "__mul"
+        primOp "(/)" = "__div"
+        primOp "+"   = "__add"
+        primOp "-"   = "__sub"
+        primOp "*"   = "__mul"
+        primOp "/"   = "__div"
         primOp x     = x
         
-        ctName    = "current"
-        allocName = "new"
-        apName    = "Apply"
+        ctName    = "__c"
+        allocName = "__k"
+        apName    = "__A"
         
         -- FIXME has to be proper functions
         
@@ -360,8 +364,7 @@ data MVar
     | MIndex    MExp MExp  -- ^ @a[n]@
     deriving (Show, Eq)
 instance Pretty MPlugin where
-    pretty (MPlugin n ds)   = string "//" <+> pretty n
-                                <//> string "{"  
+    pretty (MPlugin n ds)   = string "{"  
                                 <//> vcat (map pretty ds)
                                 <//> string "}"
 
