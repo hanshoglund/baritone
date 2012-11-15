@@ -7,7 +7,7 @@ import Language.Haskell.Syntax
 import Control.Monad.Writer hiding ((<>))
 import Control.Monad.State
 import Data.Semigroup
-import Data.List (intersperse, partition)
+import Data.List (intersperse, partition, union, (\\))
 import Data.List.Split (splitOn)
 import Text.Pretty
 
@@ -43,6 +43,15 @@ isBApp (BApp _ _) = True
 isBApp _          = False
 isBAbs (BAbs _ _) = True
 isBAbs _          = False
+
+freeVars :: BExp -> [BName]
+freeVars (BVar n)    = [n]
+freeVars (BApp f as) = freeVars f `union` concatMap freeVars as
+freeVars (BAbs ns a) = freeVars a \\ ns
+freeVars _           = []
+
+isFreeIn :: BName -> BExp -> Bool
+isFreeIn n a = elem n (freeVars a)
 
 deriving instance Show BImp
 deriving instance Show BValue
@@ -220,48 +229,53 @@ fromCore (BModule n is as)
 
         transValueDecl :: BValue -> MGen ()
         transValueDecl (BValue s a) = do
-            a' <- transExp a
+            a' <- transExp (fixPrimOps a)
             addGlobal s a'
             return ()
 
 
 
         transExp :: BExp -> MGen MExp
-        transExp (BVar n)      = do
-            return $ MVar (MId n)
+        transExp (BVar n) = do
+            return $ MVar (MProp (MVar $ MId "_c") n)
 
         transExp (BApp f as) = do
-            f'  <- transExp . fixPrimOps $ f
+            f'  <- transExp f
             as' <- mapM transExp as
             return $ MCall (MVar $ MProp f' "_a") as'
 
-        transExp (BAbs ns a)     = do
+        transExp (BAbs ns a) = do
             a' <- transExp a
             invoke <- let         
                 vars = ["_c"] ++ ns
-                body = [MReturn a']
+                body = 
+                    map (\n -> MAssign (MProp (MVar $ MId "_c") n) (MVar $ MId n)) ns 
+                    ++
+                    [MReturn a']
                 in addUniqueMethod vars body
             create <- let
                 vars = ["_c"]
-                body = [
-                    MAssign (MId "_k") (MCall (MVar $ MId "CreateDictionary") []),
-                    -- TODO copy free vars
+                alloc = [
+                    MAssign (MId "_k") (MCall (MVar $ MId "CreateDictionary") [])
+                    ]
+                copy = map (\n -> MAssign (MProp (MVar $ MId "_k") n) (MVar $ (MProp (MVar $ MId "_c") n))) (freeVars a \\ ns) 
+                ret = [
                     MExp (MCall (MVar $ MProp (MVar $ MId "_k") "SetMethod") [MStr "_a", MSelf, MVar (MId invoke)]),
                     MReturn (MVar $ MId "_k")
                     ]
-                in addUniqueMethod vars body
-            return $ MCall (MVar $ MId create) []
+                in addUniqueMethod vars (alloc ++ copy ++ ret)
+            return $ MCall (MVar $ MId create) [MSelf]
 
         transExp (BNum a) = return $ MNum a
         transExp (BStr s) = return $ MStr s
         transExp (BInl c) = return $ MInl c
 
 
-
-
         fixPrimOps :: BExp -> BExp
         fixPrimOps (BVar f) = (BVar $ primOp f)
-        fixPrimOps x        = x
+        fixPrimOps (BApp f as) = BApp (fixPrimOps f) (map fixPrimOps as)
+        fixPrimOps (BAbs ns a) = BAbs ns (fixPrimOps a)
+        fixPrimOps x           = x
 
         primOp :: BName -> BName
         primOp "(+)" = "_add"
