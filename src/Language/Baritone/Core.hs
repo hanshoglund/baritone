@@ -42,21 +42,17 @@ isBApp _          = False
 isBAbs (BAbs _ _) = True
 isBAbs _          = False
 
-instance Show BImportDecl where
-    show = show . pretty
-instance Show BValueDecl where
-    show = show . pretty
-instance Show BModule where
-    show = show . pretty
-instance Show BExp where
-    show = show . pretty
+deriving instance Show BImportDecl
+deriving instance Show BValueDecl
+deriving instance Show BModule
+deriving instance Show BExp
 
 instance Pretty BImportDecl where
     pretty (BImportDecl n hs a) = string "import" 
                                     <+> string "hiding" <+> parens (sepBy (string ",") $ map pretty hs)
                                     <+> string "as" <+> maybe mempty string a
 instance Pretty BValueDecl where
-    pretty (BValueDecl n a)     = string n </> nest 8 (string "=" <+> pretty a)
+    pretty (BValueDecl n a)     = string n </> nest 12 (string "=" <+> pretty a)
 instance Pretty BModule where
     pretty (BModule n is as)    = string "module"
                                     <+> string (concatWith "." n)
@@ -101,17 +97,17 @@ toCore (HsModule l n es is as)
         -- TODO name resolution/mangling
         
         translateDecl :: HsDecl -> BValueDecl
-        translateDecl (HsPatBind l ps a ws)               = translatePatBind ps a ws
-        translateDecl (HsFunBind [HsMatch l n [ps] a ws]) = translateFunBind n ps a ws
-        translateDecl _                                   = notSupported
-        -- TODO multiple bindings
+        translateDecl (HsPatBind l p a ws)              = translatePatBind p a ws
+        translateDecl (HsFunBind [HsMatch l n ps a ws]) = translateFunBind n ps a ws
+        translateDecl _                                 = notSupported
+        -- TODO multiple match clauses
 
         translatePatBind :: HsPat -> HsRhs -> [HsDecl] -> BValueDecl
-        translatePatBind ps a ws = BValueDecl (translatePattern ps) (translateRhs a)
+        translatePatBind p a ws = BValueDecl (translatePattern p) (translateRhs a)
         -- TODO with clause
         
-        translateFunBind :: HsName -> HsPat -> HsRhs -> [HsDecl] -> BValueDecl
-        translateFunBind n ps a ws = BValueDecl (getHsName n) (translateRhs a)
+        translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BValueDecl
+        translateFunBind n ps a ws = BValueDecl (getHsName n) (BAbs (map translatePattern ps) (translateRhs a))
 
         translateRhs :: HsRhs -> BExp
         translateRhs (HsUnGuardedRhs a) = translateExpr a
@@ -244,6 +240,7 @@ data MPlugin
     = MPlugin 
         MName 
         [MPluginDecl]
+    deriving (Show, Eq)
 instance Pretty MPlugin where
     pretty (MPlugin n ds)   = string "//" <+> pretty n 
                                 </> braces (vcat $ map pretty ds)
@@ -251,6 +248,7 @@ instance Pretty MPlugin where
 data MPluginDecl
     = MGlobal MName MExp            -- name body
     | MMethod MName [MName] [MStm]  -- name vars body
+    deriving (Show, Eq)
 instance Pretty MPluginDecl where
     pretty (MGlobal n a)    = pretty n <+> quotes (pretty a) 
     pretty (MMethod n vs a) = pretty n <+> quotes
@@ -268,6 +266,7 @@ data MStm
     | MAssign   MVar MExp
     | MReturn   MExp
     | MEmpty
+    deriving (Show, Eq)
 instance Pretty MStm where
     pretty (MIf p a b)          = string "if" <+> parens (pretty p)
                                   <//> string "{" <//> indent 1 (pretty a) <//> string "}"
@@ -307,6 +306,7 @@ data MExp
     | MBool     Bool
     | MSelf
     | MNull
+    deriving (Show, Eq)
 instance Pretty MExp where
     pretty (MOp1 n a)   = pretty n <+> pretty a
     pretty (MOp2 n a b) = pretty a <+> string n <+> pretty b
@@ -324,6 +324,7 @@ data MVar
     | MProp     MVar MName -- ^ @a.n@
     | MPropDef  MVar MName -- ^ @a._property:n@
     | MIndex    MVar MExp  -- ^ @a[n]@
+    deriving (Show, Eq)
 instance Pretty MVar where
     pretty (MId n)        = string n
     pretty (MProp n a)    = pretty n <> string "." <> string a
