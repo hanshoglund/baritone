@@ -80,105 +80,105 @@ pretty' x | isBApp x  = parens (pretty x)
 -- | Compile a Haskell module into a Baritone module.
 toCore :: HsModule -> BModule
 toCore (HsModule l n es is as)
-    = BModule
-        (translateModuleName n)
-        (map translateImport is)
-        (map translateDecl as)
-
+    = BModule 
+        (transModName n) 
+        (map transImSpec is) 
+        (map transDec as)
 
     where
-        translateModuleName :: Module -> BModuleName
-        translateModuleName (Module n) = splitOn "." n
 
-        translateExport :: HsExportSpec -> ()
-        translateExport = notSupported
+        transModName :: Module -> BModuleName
+        transModName (Module n) = splitOn "." n
+
+        transExSpec :: HsExportSpec -> ()
+        transExSpec = notSupported
         -- TODO handle export spec (by renaming?)
 
-        translateImport :: HsImportDecl -> BImp
-        translateImport = notSupported
+        transImSpec :: HsImportDecl -> BImp
+        transImSpec = notSupported
         -- TODO name resolution/mangling
 
-        translateDecl :: HsDecl -> BValue
-        translateDecl (HsPatBind l p a ws)              = translatePatBind p a ws
-        translateDecl (HsFunBind [HsMatch l n ps a ws]) = translateFunBind n ps a ws
-        translateDecl _                                 = notSupported
+        transDec :: HsDecl -> BValue
+        transDec (HsPatBind l p a ws)              = transPatBind p a ws
+        transDec (HsFunBind [HsMatch l n ps a ws]) = translateFunBind n ps a ws
+        transDec _                                 = notSupported
         -- TODO multiple match clauses
 
-        translatePatBind :: HsPat -> HsRhs -> [HsDecl] -> BValue
-        translatePatBind p a ws = BValue (translatePattern p) (translateRhs a)
+        transPatBind :: HsPat -> HsRhs -> [HsDecl] -> BValue
+        transPatBind p a ws = BValue (transPat p) (transRhs a)
         -- TODO with clause
 
         translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BValue
-        translateFunBind n ps a ws = BValue (getHsName n) (BAbs (map translatePattern ps) (translateRhs a))
+        translateFunBind n ps a ws = BValue (getHsName n) (BAbs (map transPat ps) (transRhs a))
 
-        translateRhs :: HsRhs -> BExp
-        translateRhs (HsUnGuardedRhs a) = translateExpr a
-        translateRhs _                  = notSupported
+        transRhs :: HsRhs -> BExp
+        transRhs (HsUnGuardedRhs a) = transExp a
+        transRhs _                  = notSupported
 
 
 
-        translateExpr :: HsExp -> BExp
-        translateExpr (HsParen a)               = translateExpr a
+        transExp :: HsExp -> BExp
+        transExp (HsParen a)               = transExp a
 
         -- core
-        translateExpr (HsVar n)                 = translateQName n
-        translateExpr (HsApp f a)               = BApp (translateExpr f) [translateExpr a]
-        translateExpr (HsNegApp a)              = BApp (BInl "(-)") [translateExpr a]
-        translateExpr (HsInfixApp a f b)        = BApp (wrapOp . translateQName . getHsQOp $ f) [translateExpr a, translateExpr b]
-        translateExpr (HsLeftSection a f)       = BApp (wrapOp . translateQName . getHsQOp $ f) [translateExpr a]
-        translateExpr (HsRightSection f a)      = BApp (wrapOp . translateQName . getHsQOp $ f) [translateExpr a]
-        translateExpr (HsLambda l ps as)        = BAbs (map translatePattern ps) (translateExpr as)
+        transExp (HsVar n)                 = transQName n
+        transExp (HsApp f a)               = BApp (transExp f) [transExp a]
+        transExp (HsNegApp a)              = BApp (BInl "(-)") [transExp a]
+        transExp (HsInfixApp a f b)        = BApp (wrapOp . transQName . getHsQOp $ f) [transExp a, transExp b]
+        transExp (HsLeftSection a f)       = BApp (wrapOp . transQName . getHsQOp $ f) [transExp a]
+        transExp (HsRightSection f a)      = BApp (wrapOp . transQName . getHsQOp $ f) [transExp a]
+        transExp (HsLambda l ps as)        = BAbs (map transPat ps) (transExp as)
 
         -- literals
-        translateExpr (HsLit l)                 = translateLiteral l
+        transExp (HsLit l)                 = transLit l
 
         -- special
-        translateExpr (HsCon n)                 = notSupported
-        translateExpr (HsTuple as)              = notSupported
-        translateExpr (HsList as)               = notSupported
-        translateExpr (HsLet ds a)              = notSupported
-        translateExpr (HsIf p a b)              = notSupported
-        translateExpr (HsCase p as)             = notSupported
-        translateExpr (HsDo as)                 = notSupported
+        transExp (HsCon n)                 = notSupported
+        transExp (HsTuple as)              = notSupported
+        transExp (HsList as)               = notSupported
+        transExp (HsLet ds a)              = notSupported
+        transExp (HsIf p a b)              = notSupported
+        transExp (HsCase p as)             = notSupported
+        transExp (HsDo as)                 = notSupported
 
         -- sugar
-        translateExpr (HsRecConstr n m)         = notSupported
-        translateExpr (HsRecUpdate n m)         = notSupported
-        translateExpr (HsEnumFrom a)            = notSupported
-        translateExpr (HsEnumFromTo a b)        = notSupported
-        translateExpr (HsEnumFromThen a b)      = notSupported
-        translateExpr (HsEnumFromThenTo a b c)  = notSupported
-        translateExpr (HsListComp a as)         = notSupported
+        transExp (HsRecConstr n m)         = notSupported
+        transExp (HsRecUpdate n m)         = notSupported
+        transExp (HsEnumFrom a)            = notSupported
+        transExp (HsEnumFromTo a b)        = notSupported
+        transExp (HsEnumFromThen a b)      = notSupported
+        transExp (HsEnumFromThenTo a b c)  = notSupported
+        transExp (HsListComp a as)         = notSupported
 
         -- types
-        translateExpr (HsExpTypeSig l a t)      = notSupported
+        transExp (HsExpTypeSig l a t)      = notSupported
 
         -- patterns
-        translateExpr (HsAsPat n a)             = notSupported
-        translateExpr (HsWildCard)              = notSupported
-        translateExpr (HsIrrPat a)              = notSupported
+        transExp (HsAsPat n a)             = notSupported
+        transExp (HsWildCard)              = notSupported
+        transExp (HsIrrPat a)              = notSupported
 
 
-        translatePattern :: HsPat -> BName
-        translatePattern (HsPVar n) = getHsName n
-        translatePattern _          = notSupported
+        transPat :: HsPat -> BName
+        transPat (HsPVar n) = getHsName n
+        transPat _          = notSupported
         -- TODO proper matching
 
-        translateQName :: HsQName -> BExp
-        translateQName (Qual m n)                = notSupported -- TODO
-        translateQName (UnQual n)                = BVar (getHsName n)
-        translateQName (Special HsUnitCon)       = BInl "null"
-        translateQName (Special HsListCon)       = BInl "CreateSparseArray()"
-        translateQName (Special (HsTupleCon n))  = notSupported
-        translateQName (Special HsFunCon)        = notSupported
-        translateQName (Special HsCons)          = notSupported
+        transQName :: HsQName -> BExp
+        transQName (Qual m n)                = notSupported -- TODO
+        transQName (UnQual n)                = BVar (getHsName n)
+        transQName (Special HsUnitCon)       = BInl "null"
+        transQName (Special HsListCon)       = BInl "CreateSparseArray()"
+        transQName (Special (HsTupleCon n))  = notSupported
+        transQName (Special HsFunCon)        = notSupported
+        transQName (Special HsCons)          = notSupported
 
-        translateLiteral :: HsLiteral -> BExp
-        translateLiteral (HsChar c)     = BStr [c]
-        translateLiteral (HsString s)	= BStr s
-        translateLiteral (HsInt i)	    = BNum (fromIntegral i)
-        translateLiteral (HsFrac r)	    = BNum (fromRational r)
-        translateLiteral _              = notSupported
+        transLit :: HsLiteral -> BExp
+        transLit (HsChar c)     = BStr [c]
+        transLit (HsString s)	= BStr s
+        transLit (HsInt i)	    = BNum (fromIntegral i)
+        transLit (HsFrac r)	    = BNum (fromRational r)
+        transLit _              = notSupported
 
         getHsQOp (HsQVarOp n)  = n
         getHsQOp (HsQConOp n)  = n
@@ -196,12 +196,14 @@ toCore (HsModule l n es is as)
 
 -- | Compile a Baritone module into a ManuScript plugin.
 fromCore :: BModule -> MPlugin
-fromCore (BModule n is as) = MPlugin
-                               (translateModuleName n)
-                               (foldGlobals . execMGen $ mapM translateValueDecl as >> return ())
+fromCore (BModule n is as) 
+    = MPlugin
+        (transModName n)
+        (foldGlobals . execMGen $ mapM transValueDecl as >> return ())
 
     where               
-        -- rewrite globals as self._property assignment
+
+        -- | Rewrite globals as self._property assignment
         foldGlobals :: [MDecl] -> [MDecl]
         foldGlobals xs = handleGlobals gs ++ ms
             where
@@ -211,33 +213,33 @@ fromCore (BModule n is as) = MPlugin
                 handleGlobals x = [MMethod "Initialize" [] (mconcat $ map toSelfAssign x)]
                 
                 toSelfAssign :: MDecl -> [MStm]
-                toSelfAssign (MGlobal n a) = [MAssign (MPropDef (MId "Self") n) a]
+                toSelfAssign (MGlobal n a) = [MAssign (MPropDef MSelf n) a]
         
-        translateModuleName :: BModuleName -> MName
-        translateModuleName = concatWith "_"
+        transModName :: BModuleName -> MName
+        transModName = concatWith "_"
 
-        translateValueDecl :: BValue -> MGen ()
-        translateValueDecl (BValue s a) = do
-            a' <- fromCoreExpr a
+        transValueDecl :: BValue -> MGen ()
+        transValueDecl (BValue s a) = do
+            a' <- transExp a
             addGlobal s a'
             return ()
             
-        fromCoreExpr :: BExp -> MGen MExp
-        fromCoreExpr (BVar n)      = do
+        transExp :: BExp -> MGen MExp
+        transExp (BVar n)      = do
             return $ MVar (MId n)        
         
-        fromCoreExpr (BApp f as) = do
-            f'  <- fromCoreExpr . fixPrimOps $ f
-            as' <- mapM fromCoreExpr as
-            return $ MCall f' as'
+        transExp (BApp f as) = do
+            f'  <- transExp . fixPrimOps $ f
+            as' <- mapM transExp as
+            return $ MCall (MVar $ MProp f' "call") as'
 
-        fromCoreExpr (BAbs ns a)     = do
+        transExp (BAbs ns a)     = do
             m <- addUniqueMethod [] [MExp $ MCall (MVar $ MId "trace") [MStr "Called method!"]] -- TODO
             return $ MCall (MVar $ MId m) []
 
-        fromCoreExpr (BNum a) = return $ MNum a
-        fromCoreExpr (BStr s) = return $ MStr s
-        fromCoreExpr (BInl c) = return $ MInl c
+        transExp (BNum a) = return $ MNum a
+        transExp (BStr s) = return $ MStr s
+        transExp (BInl c) = return $ MInl c
 
         fixPrimOps :: BExp -> BExp
         fixPrimOps (BVar f) = (BVar $ primOp f)
@@ -300,9 +302,9 @@ data MExp
 
 data MVar
     = MId       MName
-    | MProp     MVar MName -- ^ @a.n@
-    | MPropDef  MVar MName -- ^ @a._property:n@
-    | MIndex    MVar MExp  -- ^ @a[n]@
+    | MProp     MExp MName -- ^ @a.n@
+    | MPropDef  MExp MName -- ^ @a._property:n@
+    | MIndex    MExp MExp  -- ^ @a[n]@
     deriving (Show, Eq)
 instance Pretty MPlugin where
     pretty (MPlugin n ds)   = string "//" <+> pretty n
