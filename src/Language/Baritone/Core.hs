@@ -1,9 +1,12 @@
 
 module Language.Baritone.Core where
+
 import Language.Haskell.Syntax
 import Data.Semigroup
 import Data.List (intersperse)
+import Data.List.Split (splitOn)
 import Text.Pretty
+
 
 type BName = String -- unqualified
 type BModuleName = [String]
@@ -36,8 +39,7 @@ toCore (HsModule l n es is as) = undefined
 
     where
         translateName :: Module -> BModuleName
-        translateName (Module n) = [n]
-        -- TODO handle dot separator
+        translateName (Module n) = splitOn "." n
         -- TODO handle unicode?
 
         translateExport :: HsExportSpec -> ()
@@ -61,6 +63,7 @@ toCore (HsModule l n es is as) = undefined
 
         -- translateDecl (HsFunBind)
         -- translateDecl (HsPatBind)
+        -- TODO special handling of 'ffi'
                 
         notSupported = error "This Haskell feature is not supported"
 
@@ -84,18 +87,17 @@ fromCore (BModule n ds vs) = MPlugin
         mangleModuleName = mconcat . intersperse "_"
 
         fromCoreExpr :: BExpr -> MExpr
-        -- Wrong!
-        -- If this is a free var, it must be looked up as below
+        -- If n is free in this context, just generate x
+        -- otherwise, generate Baritone.lookup(c,x)
         fromCoreExpr (BVar n)       = MVar (MId n)
-        -- Wrong!
-        -- Must pass to a special call routine that checks if f is a generated closure
-        -- object as per below
+        --    Generate
+        --      f.call(x)
         fromCoreExpr (BApp (f:as))  = MCall (fromCoreExpr f) (map fromCoreExpr as)
-        -- Basic procedure: 
-        --     * Force generation of method
-        --     * Create a dictionary $
-        --     * Copy in free vars of a to $
-        --     * Use SetMethod to make it callable through the generated method
+        --    Cause generation of method M
+        --    Generate code to
+        --     * Create a dictionary D
+        --     * Copy in free vars of as to D
+        --     * Call D.SetMethod(M,'call',as)
         fromCoreExpr (BAbs n a)     = error "TODO"
         fromCoreExpr (BNum a)       = MNum a
         fromCoreExpr (BStr s)       = MStr s
@@ -107,8 +109,7 @@ fromCore (BModule n ds vs) = MPlugin
 
 -- http://www.simkin.co.uk/Docs/java/index.html
 
-type MName = String -- unqualified
-type MQName = MName -- TODO [MName]
+type MName = String    -- unqualified
 type MOpName = String
 
 data MPlugin
@@ -126,8 +127,8 @@ instance Pretty MPluginDecl where
     pretty (MGlobal n a)    = pretty n <+> quotes (pretty a) 
     pretty (MMethod n vs a) = pretty n <+> quotes
                                 (parens (sepBy (string ", ") $ map pretty vs)
-                                </> 
-                                sepBy mempty (map pretty a)) -- or just pretty a
+                                    </> 
+                                    sepBy mempty (map pretty a)) -- or just pretty a
 
 
 data MStm
@@ -144,24 +145,25 @@ instance Pretty MStm where
                                   <//> string "{" <//> indent 1 (pretty a) <//> string "}"
                                   <//> string "else"
                                   <//> string "{" <//> indent 1 (pretty a) <//> string "}"
+
     pretty (MWhile p a)         = string "while" <+> parens (pretty p)
                                   <//> string "{" <//> indent 1 (vcat $ map pretty a) <//> string "}"
+
     pretty (MFor v i j k a)     = string "for" <+> parens clause
                                   <//> string "{" <//> indent 1 (vcat $ map pretty a) <//> string "}"
-        where
-            clause = mempty
-                <+> pretty v 
-                <+> string "=" <+> pretty i
-                <+> string "to" <+> pretty j
-                <+> maybe mempty (\k -> string "step" <+> pretty k) k
+        where clause            = pretty v 
+                                  <+> string "=" <+> pretty i
+                                  <+> string "to" <+> pretty j
+                                  <+> maybe mempty (\k -> string "step" <+> pretty k) k
+
     pretty (MForEach t v u a)   = string "for" <+> string "each" <+> clause
                                   <//> string "{" <//> indent 1 (vcat $ map pretty a) <//> string "}"
-        where
-            clause = mempty 
-                <+> maybe mempty (\t -> pretty t) t
-                <+> pretty v
-                <+> string "in" <+> pretty u
+        where clause            = maybe mempty (\t -> pretty t) t
+                                  <+> pretty v
+                                  <+> string "in" <+> pretty u
+
     pretty (MSwitch b cs d)     = error "TODO"
+
     pretty (MAssign n a)        = (pretty n <+> string "=" <+> pretty a) <> string ";"
     pretty (MReturn a)          = (string "return" <+> pretty a) <> string ";"
     pretty (MEmpty)             = string ";"
@@ -190,13 +192,15 @@ instance Pretty MExpr where
     pretty (MNull)      = string "null"
 
 data MVar 
-    = MId       MQName
-    | MProp     MVar MExpr
-    | MIndex    MVar MExpr
+    = MId       MName
+    | MProp     MVar MName -- ^ @a.n@
+    | MPropDef  MVar MName -- ^ @a._property:n@
+    | MIndex    MVar MExpr -- ^ @a[n]@
 instance Pretty MVar where
-    pretty (MId n)      = string n
-    pretty (MProp n a)  = pretty n <> string "." <> pretty a
-    pretty (MIndex n a) = pretty n <> brackets (pretty a)
+    pretty (MId n)        = string n
+    pretty (MProp n a)    = pretty n <> string "." <> string a
+    pretty (MPropDef n a) = pretty n <> string "._property:" <> string a
+    pretty (MIndex n a)   = pretty n <> brackets (pretty a)
 
 
 
