@@ -11,8 +11,16 @@ import Text.Pretty
 type BName = String -- unqualified
 type BModuleName = [String]
 
-data BImportDecl = BImportDecl BModuleName [BName] (Maybe BName) -- name hiding alias
-data BValueDecl = BValueDecl String BExpr
+data BImportDecl 
+    = BImportDecl 
+        BModuleName 
+        [BName] 
+        (Maybe BName) -- name hiding alias
+
+data BValueDecl = 
+    BValueDecl 
+        String 
+        BExpr
 
 data BModule
     = BModule
@@ -21,12 +29,12 @@ data BModule
         [BValueDecl]
 
 data BExpr
-    = BVar BName            -- E(x)          =  x Baritone.lookup(f,x)
-    | BApp [BExpr]          -- E(f x y)      =  E(f).call(E(x), E(y))
-    | BAbs [BName] BExpr    -- E(\x y -> e)  =  "(x,y) { E(E)}"
-    | BInl String           -- inline ManuScript code
-    | BNum Double           -- E(n)          =  n
-    | BStr String           -- E(s)          =  s
+    = BVar BName
+    | BApp [BExpr]
+    | BAbs [BName] BExpr
+    | BInl String
+    | BNum Double
+    | BStr String
 isBAbs (BAbs _ _) = True
 isBAbs _          = False
 
@@ -48,6 +56,7 @@ toCore (HsModule l n es is as) = undefined
         
         translateImport :: HsImportSpec -> ()
         translateImport = error "Not impl"
+        -- TODO name resolution/mangling
         
         translateDecl :: HsDecl -> BValueDecl
         translateDecl (HsTypeDecl l n vs t)             = notSupported
@@ -60,10 +69,46 @@ toCore (HsModule l n es is as) = undefined
         translateDecl (HsForeignImport s h f m n t)     = notSupported
         translateDecl (HsForeignExport s h m n t)       = notSupported
         translateDecl (HsTypeSig l ns t)                = notSupported
+        translateDecl (HsPatBind l p a w)               = notSupported
+        translateDecl (HsFunBind as)                    = translateMatches as
 
-        -- translateDecl (HsFunBind)
-        -- translateDecl (HsPatBind)
-        -- TODO special handling of 'ffi'
+        translateMatches :: [HsMatch] -> BValueDecl
+        translateMatches = undefined
+        -- TODO special handling of 'inline'
+
+        
+        -- translateDecl
+        
+        translateExpr :: HsExp -> BExpr
+        translateExpr (HsVar n)                 = BVar undefined
+        translateExpr (HsInfixApp a f b)        = BApp [undefined, undefined, undefined]
+        translateExpr (HsApp f a)               = BApp [undefined, undefined]
+        translateExpr (HsNegApp a)              = notSupported -- TODO
+        translateExpr (HsCon n)                 = notSupported
+        translateExpr (HsLit l)                 = notSupported -- TODO
+        translateExpr (HsLambda l p a)          = BAbs [undefined] undefined
+        translateExpr (HsLet ds a)              = notSupported
+        translateExpr (HsIf p a b)              = notSupported
+        translateExpr (HsCase p as)             = notSupported
+        translateExpr (HsDo as)                 = notSupported
+        translateExpr (HsTuple as)              = notSupported
+        translateExpr (HsList as)               = notSupported
+        translateExpr (HsParen a)               = notSupported
+        translateExpr (HsLeftSection a f)       = BApp [undefined, undefined]
+        translateExpr (HsRightSection f a)      = BApp [undefined, undefined]
+        translateExpr (HsRecConstr n m)         = notSupported
+        translateExpr (HsRecUpdate n m)         = notSupported
+        translateExpr (HsEnumFrom a)            = notSupported
+        translateExpr (HsEnumFromTo a b)        = notSupported
+        translateExpr (HsEnumFromThen a b)      = notSupported
+        translateExpr (HsEnumFromThenTo a b c)  = notSupported
+        translateExpr (HsListComp a as)         = notSupported
+        translateExpr (HsExpTypeSig l a t)      = notSupported
+        translateExpr (HsAsPat n a)             = notSupported
+        translateExpr (HsWildCard)              = notSupported
+        translateExpr (HsIrrPat a)              = notSupported
+
+
                 
         notSupported = error "This Haskell feature is not supported"
 
