@@ -15,22 +15,22 @@ import Text.Pretty
 type BName = String -- unqualified
 type BModuleName = [String]
 
-data BImportDecl
-    = BImportDecl
+data BImp
+    = BImp
         BModuleName
         [BName]
         (Maybe BName) -- name hiding alias
 
-data BValueDecl =
-    BValueDecl
+data BValue =
+    BValue
         String
         BExp
 
 data BModule
     = BModule
         BModuleName
-        [BImportDecl]
-        [BValueDecl]
+        [BImp]
+        [BValue]
 
 data BExp
     = BVar BName
@@ -44,17 +44,17 @@ isBApp _          = False
 isBAbs (BAbs _ _) = True
 isBAbs _          = False
 
-deriving instance Show BImportDecl
-deriving instance Show BValueDecl
+deriving instance Show BImp
+deriving instance Show BValue
 deriving instance Show BModule
 deriving instance Show BExp
 
-instance Pretty BImportDecl where
-    pretty (BImportDecl n hs a) = string "import"
+instance Pretty BImp where
+    pretty (BImp n hs a) = string "import"
                                     <+> string "hiding" <+> parens (sepBy (string ",") $ map pretty hs)
                                     <+> string "as" <+> maybe mempty string a
-instance Pretty BValueDecl where
-    pretty (BValueDecl n a)     = string n </> nest 12 (string "=" <+> pretty a)
+instance Pretty BValue where
+    pretty (BValue n a)     = string n </> nest 12 (string "=" <+> pretty a)
 instance Pretty BModule where
     pretty (BModule n is as)    = string "module"
                                     <+> string (concatWith "." n)
@@ -94,22 +94,22 @@ toCore (HsModule l n es is as)
         translateExport = notSupported
         -- TODO handle export spec (by renaming?)
 
-        translateImport :: HsImportDecl -> BImportDecl
+        translateImport :: HsImportDecl -> BImp
         translateImport = notSupported
         -- TODO name resolution/mangling
 
-        translateDecl :: HsDecl -> BValueDecl
+        translateDecl :: HsDecl -> BValue
         translateDecl (HsPatBind l p a ws)              = translatePatBind p a ws
         translateDecl (HsFunBind [HsMatch l n ps a ws]) = translateFunBind n ps a ws
         translateDecl _                                 = notSupported
         -- TODO multiple match clauses
 
-        translatePatBind :: HsPat -> HsRhs -> [HsDecl] -> BValueDecl
-        translatePatBind p a ws = BValueDecl (translatePattern p) (translateRhs a)
+        translatePatBind :: HsPat -> HsRhs -> [HsDecl] -> BValue
+        translatePatBind p a ws = BValue (translatePattern p) (translateRhs a)
         -- TODO with clause
 
-        translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BValueDecl
-        translateFunBind n ps a ws = BValueDecl (getHsName n) (BAbs (map translatePattern ps) (translateRhs a))
+        translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BValue
+        translateFunBind n ps a ws = BValue (getHsName n) (BAbs (map translatePattern ps) (translateRhs a))
 
         translateRhs :: HsRhs -> BExp
         translateRhs (HsUnGuardedRhs a) = translateExpr a
@@ -202,22 +202,22 @@ fromCore (BModule n is as) = MPlugin
 
     where               
         -- rewrite globals as self._property assignment
-        foldGlobals :: [MPluginDecl] -> [MPluginDecl]
+        foldGlobals :: [MDecl] -> [MDecl]
         foldGlobals xs = handleGlobals gs ++ ms
             where
                 (gs, ms) = partition isMGlobal xs
                 
-                handleGlobals :: [MPluginDecl] -> [MPluginDecl]
+                handleGlobals :: [MDecl] -> [MDecl]
                 handleGlobals x = [MMethod "Initialize" [] (mconcat $ map toSelfAssign x)]
                 
-                toSelfAssign :: MPluginDecl -> [MStm]
+                toSelfAssign :: MDecl -> [MStm]
                 toSelfAssign (MGlobal n a) = [MAssign (MPropDef (MId "Self") n) a]
         
         translateModuleName :: BModuleName -> MName
         translateModuleName = concatWith "_"
 
-        translateValueDecl :: BValueDecl -> MGen ()
-        translateValueDecl (BValueDecl s a) = do
+        translateValueDecl :: BValue -> MGen ()
+        translateValueDecl (BValue s a) = do
             a' <- fromCoreExpr a
             addGlobal s a'
             return ()
@@ -256,32 +256,7 @@ fromCore (BModule n is as) = MPlugin
 
 -- http://www.simkin.co.uk/Docs/java/index.html
 
--- |
--- Plugin generation monad including:
---  * A state for counting the number of generated functions
---  * A writer for collecting the generated functions
-type MGen = WriterT [MPluginDecl] (State Int)
 
-addGlobal :: MName -> MExp -> MGen ()
-addGlobal n e = do
-    tell [MGlobal n e]
-    return ()
-
-addMethod :: MName -> [MName] -> [MStm] -> MGen ()
-addMethod n vs as = do
-    tell [MMethod n vs as]
-    return ()
-
-addUniqueMethod :: [MName] -> [MStm] -> MGen MName
-addUniqueMethod vs as = do
-    c <- get
-    put (succ c)   
-    let n = "__" ++ show c
-    tell [MMethod n vs as]
-    return n
-
-execMGen :: MGen () -> [MPluginDecl]
-execMGen x = evalState (execWriterT x) 0
 
 type MName = String    -- unqualified
 type MOpName = String
@@ -289,31 +264,16 @@ type MOpName = String
 data MPlugin
     = MPlugin
         MName
-        [MPluginDecl]
+        [MDecl]
     deriving (Show, Eq)
-instance Pretty MPlugin where
-    pretty (MPlugin n ds)   = string "//" <+> pretty n
-                                </> braces (vcat $ map pretty ds)
 
-data MPluginDecl
+data MDecl
     = MGlobal MName MExp            -- name body
     | MMethod MName [MName] [MStm]  -- name vars body
     deriving (Show, Eq)
+
 isMGlobal (MGlobal _ _) = True
 isMGlobal _             = False
-
-instance Pretty MPluginDecl where
-    pretty (MGlobal n a)    = string n <+> doubleQuotes (asStr a)
-        where
-            asStr (MStr s) = string s
-            asStr a        = pretty a
-    pretty (MMethod n vs a) = string n <+> doubleQuotes
-                                (parens (sepBy (string ", ") $ map string vs)
-                                    <//>
-                                 (braces . indent 1) (mempty
-                                    <//> vcat (map pretty a))
-                                    <//> mempty)
-
 
 data MStm
     = MIf       MExp [MStm] [MStm]
@@ -326,6 +286,42 @@ data MStm
     | MExp      MExp
     | MEmpty
     deriving (Show, Eq)
+
+data MExp
+    = MOp1      MOpName MExp
+    | MOp2      MOpName MExp MExp
+    | MCall     MExp [MExp]
+    | MVar      MVar
+    | MInl      String
+    | MStr      String
+    | MNum      Double
+    | MBool     Bool
+    | MSelf
+    | MNull
+    deriving (Show, Eq)
+
+data MVar
+    = MId       MName
+    | MProp     MVar MName -- ^ @a.n@
+    | MPropDef  MVar MName -- ^ @a._property:n@
+    | MIndex    MVar MExp  -- ^ @a[n]@
+    deriving (Show, Eq)
+instance Pretty MPlugin where
+    pretty (MPlugin n ds)   = string "//" <+> pretty n
+                                </> braces (vcat $ map pretty ds)
+
+instance Pretty MDecl where
+    pretty (MGlobal n a)    = string n <+> doubleQuotes (asStr a)
+        where
+            asStr (MStr s) = string s
+            asStr a        = pretty a
+    pretty (MMethod n vs a) = string n </> indent 1 (doubleQuotes
+                                (parens (sepBy (string ", ") $ map string vs)
+                                    <//>
+                                 (braces . indent 1) (mempty
+                                    <//> vcat (map pretty a))
+                                    <//> mempty))
+
 instance Pretty MStm where
     pretty (MIf p a b)          = string "if" <+> parens (pretty p)
                                   <//> string "{" <//> indent 1 (pretty a) <//> string "}"
@@ -350,23 +346,11 @@ instance Pretty MStm where
 
     pretty (MSwitch b cs d)     = error "TODO"
 
-    pretty (MAssign n a)        = (pretty n <+> indent 5 (string "=" <+> pretty a) <-> string ";")
+    pretty (MAssign n a)        = (pretty n <+> indent 10 (string "=" <+> pretty a) <-> string ";")
     pretty (MReturn a)          = (string "return" <+> pretty a) <> string ";"
     pretty (MExp a)             = (pretty a) <> string ";"
     pretty (MEmpty)             = string ";"
 
-data MExp
-    = MOp1      MOpName MExp
-    | MOp2      MOpName MExp MExp
-    | MCall     MExp [MExp]
-    | MVar      MVar
-    | MInl      String
-    | MStr      String
-    | MNum      Double
-    | MBool     Bool
-    | MSelf
-    | MNull
-    deriving (Show, Eq)
 instance Pretty MExp where
     pretty (MOp1 n a)   = pretty n <+> pretty a
     pretty (MOp2 n a b) = pretty a <+> string n <+> pretty b
@@ -379,17 +363,43 @@ instance Pretty MExp where
     pretty (MSelf)      = string "self"
     pretty (MNull)      = string "null"
 
-data MVar
-    = MId       MName
-    | MProp     MVar MName -- ^ @a.n@
-    | MPropDef  MVar MName -- ^ @a._property:n@
-    | MIndex    MVar MExp  -- ^ @a[n]@
-    deriving (Show, Eq)
 instance Pretty MVar where
     pretty (MId n)        = string n
     pretty (MProp n a)    = pretty n <> string "." <> string a
     pretty (MPropDef n a) = pretty n <> string "._property:" <> string a
     pretty (MIndex n a)   = pretty n <> brackets (pretty a)
+
+
+-------------------------------------------------------------------------
+
+-- |
+-- Plugin generation monad including:
+--  * A state for counting the number of generated functions
+--  * A writer for collecting the generated functions
+type MGen = WriterT [MDecl] (State Int)
+
+addGlobal :: MName -> MExp -> MGen ()
+addGlobal n e = do
+    tell [MGlobal n e]
+    return ()
+
+addMethod :: MName -> [MName] -> [MStm] -> MGen ()
+addMethod n vs as = do
+    tell [MMethod n vs as]
+    return ()
+
+addUniqueMethod :: [MName] -> [MStm] -> MGen MName
+addUniqueMethod vs as = do
+    c <- get
+    put (succ c)   
+    let n = "__" ++ show c
+    tell [MMethod n vs as]
+    return n
+
+execMGen :: MGen () -> [MDecl]
+execMGen x = evalState (execWriterT x) 0
+
+-------------------------------------------------------------------------                       
 
 
 
