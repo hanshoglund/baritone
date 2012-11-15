@@ -244,10 +244,10 @@ fromCore (BModule n is as) = MPlugin
         fixPrimOps x        = x
         
         primOp :: BName -> BName
-        primOp "(+)" = "B.add"
-        primOp "(-)" = "B.sub"
-        primOp "(*)" = "B.mul"
-        primOp "(/)" = "B.div"
+        primOp "(+)" = "__add"
+        primOp "(-)" = "__sub"
+        primOp "(*)" = "__mul"
+        primOp "(/)" = "__div"
         primOp x     = x
 
 -------------------------------------------------------------------------
@@ -255,8 +255,6 @@ fromCore (BModule n is as) = MPlugin
 -------------------------------------------------------------------------
 
 -- http://www.simkin.co.uk/Docs/java/index.html
-
-
 
 type MName = String    -- unqualified
 type MOpName = String
@@ -280,7 +278,7 @@ data MStm
     | MWhile    MExp [MStm]
     | MFor      MName MExp MExp (Maybe MExp) [MStm]  -- var from to step body
     | MForEach  (Maybe MName) MName MExp [MStm]      -- type? var iterable body
-    | MSwitch   MExp [(MExp, [MStm])] (Maybe [MStm]) -- disamb cases default
+    -- | MSwitch   MExp [(MExp, [MStm])] (Maybe [MStm]) -- disamb cases default
     | MAssign   MVar MExp
     | MReturn   MExp
     | MExp      MExp
@@ -344,7 +342,7 @@ instance Pretty MStm where
                                   <+> pretty v
                                   <+> string "in" <+> pretty u
 
-    pretty (MSwitch b cs d)     = error "TODO"
+    -- pretty (MSwitch b cs d)     = error "TODO"
 
     pretty (MAssign n a)        = (pretty n <+> indent 10 (string "=" <+> pretty a) <-> string ";")
     pretty (MReturn a)          = (string "return" <+> pretty a) <> string ";"
@@ -360,7 +358,7 @@ instance Pretty MExp where
     pretty (MStr s)     = quotes (string $ s) -- TODO proper escaping
     pretty (MNum a)     = double a
     pretty (MBool a)    = if a then string "true" else string "false"
-    pretty (MSelf)      = string "self"
+    pretty (MSelf)      = string "Self"
     pretty (MNull)      = string "null"
 
 instance Pretty MVar where
