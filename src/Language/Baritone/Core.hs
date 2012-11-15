@@ -34,12 +34,12 @@ data BModule
 
 data BExp
     = BVar BName
-    | BApp [BExp]
+    | BApp BExp [BExp]
     | BAbs [BName] BExp
     | BInl String
     | BNum Double
     | BStr String
-isBApp (BApp _)   = True
+isBApp (BApp _ _) = True
 isBApp _          = False
 isBAbs (BAbs _ _) = True
 isBAbs _          = False
@@ -64,7 +64,7 @@ instance Pretty BModule where
                                     <//> vcat (map pretty as)
 instance Pretty BExp where
     pretty (BVar n)     = string n
-    pretty (BApp as)    = hsep (map pretty' as)
+    pretty (BApp f as)  = hsep (map pretty' $ f:as)
     pretty (BAbs ns a)  = (string "\\" <-> hsep (map string ns) <+> string "->")
                             <+> pretty a
     pretty (BInl s)     = string "inline" <+> string s
@@ -122,11 +122,11 @@ toCore (HsModule l n es is as)
 
         -- core
         translateExpr (HsVar n)                 = translateQName n
-        translateExpr (HsApp f a)               = BApp [translateExpr f, translateExpr a]
-        translateExpr (HsNegApp a)              = BApp [BInl "(-)", translateExpr a]
-        translateExpr (HsInfixApp a f b)        = BApp [wrapOp . translateQName . getHsQOp $ f, translateExpr a, translateExpr b]
-        translateExpr (HsLeftSection a f)       = BApp [wrapOp . translateQName . getHsQOp $ f, translateExpr a]
-        translateExpr (HsRightSection f a)      = BApp [wrapOp . translateQName . getHsQOp $ f, translateExpr a]
+        translateExpr (HsApp f a)               = BApp (translateExpr f) [translateExpr a]
+        translateExpr (HsNegApp a)              = BApp (BInl "(-)") [translateExpr a]
+        translateExpr (HsInfixApp a f b)        = BApp (wrapOp . translateQName . getHsQOp $ f) [translateExpr a, translateExpr b]
+        translateExpr (HsLeftSection a f)       = BApp (wrapOp . translateQName . getHsQOp $ f) [translateExpr a]
+        translateExpr (HsRightSection f a)      = BApp (wrapOp . translateQName . getHsQOp $ f) [translateExpr a]
         translateExpr (HsLambda l ps as)        = BAbs (map translatePattern ps) (translateExpr as)
 
         -- literals
@@ -226,12 +226,12 @@ fromCore (BModule n is as) = MPlugin
         fromCoreExpr (BVar n)      = do
             return $ MVar (MId n)        
         
-        fromCoreExpr (BApp (f:as)) = do
+        fromCoreExpr (BApp f as) = do
             f'  <- fromCoreExpr . fixPrimOps $ f
             as' <- mapM fromCoreExpr as
             return $ MCall f' as'
 
-        fromCoreExpr (BAbs n a)     = do
+        fromCoreExpr (BAbs ns a)     = do
             m <- addUniqueMethod [] [MExp $ MCall (MVar $ MId "trace") [MStr "Called method!"]] -- TODO
             return $ MCall (MVar $ MId m) []
 
