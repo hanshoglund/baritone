@@ -7,7 +7,7 @@ import Language.Haskell.Syntax
 import Control.Monad.Writer hiding ((<>))
 import Control.Monad.State
 import Data.Semigroup
-import Data.List (intersperse)
+import Data.List (intersperse, partition)
 import Data.List.Split (splitOn)
 import Text.Pretty
 
@@ -198,9 +198,21 @@ toCore (HsModule l n es is as)
 fromCore :: BModule -> MPlugin
 fromCore (BModule n is as) = MPlugin
                                (translateModuleName n)
-                               (execMGen $ mapM translateValueDecl as >> return ())
+                               (foldGlobals . execMGen $ mapM translateValueDecl as >> return ())
 
-    where
+    where               
+        -- rewrite globals as self._property assignment
+        foldGlobals :: [MPluginDecl] -> [MPluginDecl]
+        foldGlobals xs = handleGlobals gs ++ ms
+            where
+                (gs, ms) = partition isMGlobal xs
+                
+                handleGlobals :: [MPluginDecl] -> [MPluginDecl]
+                handleGlobals x = [MMethod "Initialize" [] (mconcat $ map toSelfAssign x)]
+                
+                toSelfAssign :: MPluginDecl -> [MStm]
+                toSelfAssign (MGlobal n a) = [MAssign (MPropDef (MId "Self") n) a]
+        
         translateModuleName :: BModuleName -> MName
         translateModuleName = concatWith "_"
 
@@ -209,22 +221,34 @@ fromCore (BModule n is as) = MPlugin
             a' <- fromCoreExpr a
             addGlobal s a'
             return ()
-
+            
         fromCoreExpr :: BExp -> MGen MExp
         fromCoreExpr (BVar n)      = do
             return $ MVar (MId n)        
         
         fromCoreExpr (BApp (f:as)) = do
-            f'  <- fromCoreExpr f
+            f'  <- fromCoreExpr . fixPrimOps $ f
             as' <- mapM fromCoreExpr as
             return $ MCall f' as'
 
         fromCoreExpr (BAbs n a)     = do
-            return $ MInl "CreateDictionary()"
+            m <- addUniqueMethod [] [MExp $ MCall (MVar $ MId "trace") [MStr "Called method!"]] -- TODO
+            return $ MCall (MVar $ MId m) []
 
         fromCoreExpr (BNum a) = return $ MNum a
         fromCoreExpr (BStr s) = return $ MStr s
         fromCoreExpr (BInl c) = return $ MInl c
+
+        fixPrimOps :: BExp -> BExp
+        fixPrimOps (BVar f) = (BVar $ primOp f)
+        fixPrimOps x        = x
+        
+        primOp :: BName -> BName
+        primOp "(+)" = "B.add"
+        primOp "(-)" = "B.sub"
+        primOp "(*)" = "B.mul"
+        primOp "(/)" = "B.div"
+        primOp x     = x
 
 -------------------------------------------------------------------------
 -- ManuScript
@@ -275,12 +299,20 @@ data MPluginDecl
     = MGlobal MName MExp            -- name body
     | MMethod MName [MName] [MStm]  -- name vars body
     deriving (Show, Eq)
+isMGlobal (MGlobal _ _) = True
+isMGlobal _             = False
+
 instance Pretty MPluginDecl where
-    pretty (MGlobal n a)    = pretty n <+> quotes (pretty a)
-    pretty (MMethod n vs a) = pretty n <+> quotes
-                                (parens (sepBy (string ", ") $ map pretty vs)
-                                    </>
-                                    sepBy mempty (map pretty a)) -- or just pretty a
+    pretty (MGlobal n a)    = string n <+> doubleQuotes (asStr a)
+        where
+            asStr (MStr s) = string s
+            asStr a        = pretty a
+    pretty (MMethod n vs a) = string n <+> doubleQuotes
+                                (parens (sepBy (string ", ") $ map string vs)
+                                    <//>
+                                 (braces . indent 1) (mempty
+                                    <//> vcat (map pretty a))
+                                    <//> mempty)
 
 
 data MStm
@@ -291,6 +323,7 @@ data MStm
     | MSwitch   MExp [(MExp, [MStm])] (Maybe [MStm]) -- disamb cases default
     | MAssign   MVar MExp
     | MReturn   MExp
+    | MExp      MExp
     | MEmpty
     deriving (Show, Eq)
 instance Pretty MStm where
@@ -317,8 +350,9 @@ instance Pretty MStm where
 
     pretty (MSwitch b cs d)     = error "TODO"
 
-    pretty (MAssign n a)        = (pretty n <+> string "=" <+> pretty a) <> string ";"
+    pretty (MAssign n a)        = (pretty n <+> indent 5 (string "=" <+> pretty a) <-> string ";")
     pretty (MReturn a)          = (string "return" <+> pretty a) <> string ";"
+    pretty (MExp a)             = (pretty a) <> string ";"
     pretty (MEmpty)             = string ";"
 
 data MExp
@@ -339,7 +373,7 @@ instance Pretty MExp where
     pretty (MCall n as) = pretty n <> parens (sepBy (string ", ") $ map pretty as)
     pretty (MVar n)     = pretty n
     pretty (MInl c)     = string c
-    pretty (MStr s)     = string . show $ s
+    pretty (MStr s)     = quotes (string $ s) -- TODO proper escaping
     pretty (MNum a)     = double a
     pretty (MBool a)    = if a then string "true" else string "false"
     pretty (MSelf)      = string "self"
@@ -360,5 +394,6 @@ instance Pretty MVar where
 
 
 indent n = nest (4 * n)
+spaces x = mempty <+> x <+> mempty x
 concatWith x = mconcat . intersperse x
 
