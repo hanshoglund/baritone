@@ -259,6 +259,9 @@ fromCore (BModule n is as)
                     MAssign (MId "_k") (MCall (MVar $ MId "CreateDictionary") [])
                     ]
                 copy = map (\n -> MAssign (MProp (MVar $ MId "_k") n) (MVar $ (MProp (MVar $ MId "_c") n))) (freeVars a \\ ns) 
+
+                -- FIXME should only be self in a top-level binding
+                -- maybe use _c and assign that to self in Initialize?
                 ret = [
                     MExp (MCall (MVar $ MProp (MVar $ MId "_k") "SetMethod") [MStr "_a", MSelf, MVar (MId invoke)]),
                     MReturn (MVar $ MId "_k")
@@ -283,6 +286,22 @@ fromCore (BModule n is as)
         primOp "(*)" = "_mul"
         primOp "(/)" = "_div"
         primOp x     = x
+        
+        -- FIXME has to be proper functions
+        
+        main :: [MDecl]
+        main = [
+                MMethod "Run" [] [MExp $ MCall (MVar $ MProp (MVar $ MId "main") "_a") []]
+            ]
+        
+        primOps :: [MDecl]
+        primOps 
+            = [ 
+                MMethod "_add"   ["a", "b"] [MReturn $ MOp2 "+" (MVar $ MId "a") (MVar $ MId "b")],
+                MMethod "_sub"   ["a", "b"] [MReturn $ MOp2 "-" (MVar $ MId "a") (MVar $ MId "b")],
+                MMethod "_mul"   ["a", "b"] [MReturn $ MOp2 "*" (MVar $ MId "a") (MVar $ MId "b")],
+                MMethod "_div"   ["a", "b"] [MReturn $ MOp2 "/" (MVar $ MId "a") (MVar $ MId "b")]
+              ]
 
 -------------------------------------------------------------------------
 -- ManuScript
