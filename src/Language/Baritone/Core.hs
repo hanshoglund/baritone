@@ -37,14 +37,44 @@ data BExp
     | BInl String
     | BNum Double
     | BStr String
+isBApp (BApp _)   = True
+isBApp _          = False
 isBAbs (BAbs _ _) = True
 isBAbs _          = False
 
-deriving instance Show BImportDecl
-deriving instance Show BValueDecl
-deriving instance Show BModule
-deriving instance Show BExp
+instance Show BImportDecl where
+    show = show . pretty
+instance Show BValueDecl where
+    show = show . pretty
+instance Show BModule where
+    show = show . pretty
+instance Show BExp where
+    show = show . pretty
 
+instance Pretty BImportDecl where
+    pretty (BImportDecl n hs a) = string "import" 
+                                    <+> string "hiding" <+> parens (sepBy (string ",") $ map pretty hs)
+                                    <+> string "as" <+> maybe mempty string a
+instance Pretty BValueDecl where
+    pretty (BValueDecl n a)     = string n </> nest 8 (string "=" <+> pretty a)
+instance Pretty BModule where
+    pretty (BModule n is as)    = string "module"
+                                    <+> string (concatWith "." n)
+                                    <+> vcat (map pretty is)
+                                    <+> string "where"
+                                    <//> empty
+                                    <//> vcat (map pretty as)
+instance Pretty BExp where
+    pretty (BVar n)     = string n
+    pretty (BApp as)    = hsep (map pretty' as)
+    pretty (BAbs ns a)  = (string "\\" <-> hsep (map string ns) <+> string "->") 
+                            <+> pretty a
+    pretty (BInl s)     = string "inline" <+> string s
+    pretty (BNum n)     = string (show n)               
+    pretty (BStr s)     = string (show s)
+
+pretty' x | isBApp x  = parens (pretty x)    
+          | otherwise = pretty x
 -------------------------------------------------------------------------
 -- Haskell to Core
 -------------------------------------------------------------------------
@@ -95,10 +125,10 @@ toCore (HsModule l n es is as)
         -- core
         translateExpr (HsVar n)                 = translateQName n
         translateExpr (HsApp f a)               = BApp [translateExpr f, translateExpr a]
-        translateExpr (HsNegApp a)              = BApp [BInl "Baritone.negate", translateExpr a]
-        translateExpr (HsInfixApp a f b)        = BApp [translateQName (getHsQOp f), translateExpr a, translateExpr b]
-        translateExpr (HsLeftSection a f)       = BApp [translateQName (getHsQOp f), translateExpr a]
-        translateExpr (HsRightSection f a)      = BApp [translateQName (getHsQOp f), translateExpr a]
+        translateExpr (HsNegApp a)              = BApp [BInl "(-)", translateExpr a]
+        translateExpr (HsInfixApp a f b)        = BApp [wrapOp . translateQName . getHsQOp $ f, translateExpr a, translateExpr b]
+        translateExpr (HsLeftSection a f)       = BApp [wrapOp . translateQName . getHsQOp $ f, translateExpr a]
+        translateExpr (HsRightSection f a)      = BApp [wrapOp . translateQName . getHsQOp $ f, translateExpr a]
         translateExpr (HsLambda l ps as)        = BAbs (map translatePattern ps) (translateExpr as)
         
         -- literals
@@ -156,6 +186,9 @@ toCore (HsModule l n es is as)
         getHsQOp (HsQConOp n)  = n
         getHsName (HsIdent n)  = n
         getHsName (HsSymbol n) = n
+        
+        wrapOp (BVar x) = BVar $ "(" ++ x ++ ")"
+        wrapOp x        = x
                 
         notSupported = error "This Haskell feature is not supported"
 
@@ -179,7 +212,7 @@ fromCore (BModule n ds vs) = MPlugin
             | otherwise     = error "TODO"
 
         mangleModuleName :: BModuleName -> MName
-        mangleModuleName = mconcat . intersperse "_"
+        mangleModuleName = concatWith "_"
 
         fromCoreExpr :: BExp -> MExp
         -- If n is free in this context, just generate x
@@ -300,5 +333,5 @@ instance Pretty MVar where
 
 
 indent n = nest (4 * n)
-
+concatWith x = mconcat . intersperse x
 

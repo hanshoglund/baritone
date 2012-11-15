@@ -1,1 +1,3 @@
 dist
+*.core
+*.core2
