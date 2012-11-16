@@ -28,7 +28,7 @@ module Language.Baritone.Core (
          addGlobal,
          addMethod,
          addUniqueMethod,
-         execMGen,
+         createPlugin,
          
          -- ** Haskell to core translation
          toCore,         
@@ -348,37 +348,37 @@ fromCore (BModule n is as)
 --
 -- See <http://www.simkin.co.uk/Docs/java>
 --
-data MPlugin = MPlugin MName [MDecl]
+data MPlugin = MPlugin MName [MDecl] -- ^ /name declarations/
     deriving (Show, Eq)
 
 type MName   = String
 type MOpName = String
 
 data MDecl
-    = MGlobal MName MExp            -- name body
-    | MMethod MName [MName] [MStm]  -- name vars body
+    = MGlobal MName MExp            -- ^ /name body/
+    | MMethod MName [MName] [MStm]  -- ^ /name vars body/
     deriving (Show, Eq)
 
 isMGlobal (MGlobal _ _) = True
 isMGlobal _             = False
 
 data MStm
-    = MIf       MExp [MStm] [MStm]
-    | MWhile    MExp [MStm]
-    | MFor      MName MExp MExp (Maybe MExp) [MStm]  -- var from to step body
-    | MForEach  (Maybe MName) MName MExp [MStm]      -- type? var iterable body
-    -- | MSwitch   MExp [(MExp, [MStm])] (Maybe [MStm]) -- disamb cases default
-    | MAssign   MVar MExp
-    | MReturn   MExp
-    | MExp      MExp
+    = MIf       MExp [MStm] [MStm]                      -- ^ /test true-case false-case/
+    | MWhile    MExp [MStm]                             -- ^ /test body/
+    | MFor      MName MExp MExp (Maybe MExp) [MStm]     -- ^ /var from to step body/
+    | MForEach  (Maybe MName) MName MExp [MStm]         -- ^ /type? var iterable body/
+    | MAssign   MVar MExp                               -- ^ /var expr/
+    | MReturn   MExp                                    -- ^ /expr/
+    | MExp      MExp                                    -- ^ /expr/
     | MEmpty
     deriving (Show, Eq)
+    --  | MSwitch   MExp [(MExp, [MStm])] (Maybe [MStm])  -- ^ /disamb cases default/
 
 data MExp
-    = MOp1      MOpName MExp
-    | MOp2      MOpName MExp MExp
-    | MCall     MExp [MExp]
-    | MVar      MVar
+    = MOp1      MOpName MExp        -- ^ /op expr/
+    | MOp2      MOpName MExp MExp   -- ^ /op expr expr/
+    | MCall     MExp [MExp]         -- ^ /expr expr*/
+    | MVar      MVar                -- ^ /var/
     | MInl      String
     | MStr      String
     | MNum      Double
@@ -389,9 +389,9 @@ data MExp
 
 data MVar
     = MId       MName
-    | MProp     MExp MName -- ^ @a.n@
-    | MPropDef  MExp MName -- ^ @a._property:n@
-    | MIndex    MExp MExp  -- ^ @a[n]@
+    | MProp     MExp MName -- ^ /a.n/
+    | MPropDef  MExp MName -- ^ /a._property:n/
+    | MIndex    MExp MExp  -- ^ /a[n]/
     deriving (Show, Eq)
 
 instance Pretty MPlugin where
@@ -488,6 +488,9 @@ addUniqueMethod vs as = do
 
 execMGen :: MGen () -> [MDecl]
 execMGen x = evalState (execWriterT x) 0
+
+createPlugin :: MGen () -> MPlugin
+createPlugin = MPlugin "" . execMGen
 
 -------------------------------------------------------------------------
 
