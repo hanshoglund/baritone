@@ -29,7 +29,7 @@ toManuScript (BModule n is as)
 foldGlobals :: [MDecl] -> [MDecl]
 foldGlobals xs = handleGlobals gs ++ ms
     where
-        (gs, ms) = partition isMGlobal xs
+        (gs, ms) = partition isGlobal xs
 
         handleGlobals :: [MDecl] -> [MDecl]
         handleGlobals x = [MMethod "Initialize" [] (mconcat $ map toSelfAssign x)]
@@ -42,7 +42,7 @@ transModName = concatWith "_"
 
 transValueDecl :: BDecl -> MGen ()
 transValueDecl (BDecl n a) = do
-    a' <- transExp True (fixPrimOps $ a)
+    a' <- transExp True (primOps $ a)
     addGlobal n a'
     return ()
 
@@ -88,14 +88,11 @@ transExp _ (BNum a)    = return $ MNum a
 transExp _ (BStr s)    = return $ MStr s
 
 
-fixPrimOps :: BExp -> BExp
-fixPrimOps (BVar f) = (BVar $ primOp f)
-fixPrimOps (BApp f as) = BApp (fixPrimOps f) (map fixPrimOps as)
-fixPrimOps (BAbs ns a) = BAbs ns (fixPrimOps a)
-fixPrimOps x           = x
-
-mid x     = MVar (MId x)
-mprop x y = MVar (MProp x y)
+primOps :: BExp -> BExp
+primOps (BVar f)    = (BVar $ primOp f)
+primOps (BApp f as) = BApp (primOps f) (map primOps as)
+primOps (BAbs ns a) = BAbs ns (primOps a)
+primOps x           = x
 
 primOp :: BName -> BName
 primOp "(+)" = "__add"
@@ -112,21 +109,10 @@ ctName    = "c"
 allocName = "k"
 apName    = "A"
 
--- FIXME has to be proper functions
-
 main :: [MDecl]
 main = [
         MMethod "Run" [] [MExp $ MCall (MVar $ MProp (mid "main") apName) []]
     ]
-
-primOps :: [MDecl]
-primOps
-    = [
-        MMethod "add"   ["a", "b"] [MReturn $ MOp2 "+" (mid "a") (mid "b")],
-        MMethod "sub"   ["a", "b"] [MReturn $ MOp2 "-" (mid "a") (mid "b")],
-        MMethod "mul"   ["a", "b"] [MReturn $ MOp2 "*" (mid "a") (mid "b")],
-        MMethod "div"   ["a", "b"] [MReturn $ MOp2 "/" (mid "a") (mid "b")]
-      ]
               
 -------------------------------------------------------------------------
 

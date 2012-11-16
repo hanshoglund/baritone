@@ -7,10 +7,12 @@ module Language.ManuScript (
          MName(..),
          MOpName(..),
          MDecl(..),
+         isGlobal,
          MStm(..),
          MExp(..),
          MVar(..),
-         isMGlobal,
+         mid,
+         mprop,
          
          -- *** Code generation monad
          MGen(..),
@@ -48,8 +50,8 @@ data MDecl
     | MMethod MName [MName] [MStm]  -- ^ /name vars body/
     deriving (Show, Eq)
 
-isMGlobal (MGlobal _ _) = True
-isMGlobal _             = False
+isGlobal (MGlobal _ _) = True
+isGlobal _             = False
 
 data MStm
     = MIf       MExp [MStm] [MStm]                      -- ^ /test true-case false-case/
@@ -82,6 +84,13 @@ data MVar
     | MPropDef  MExp MName -- ^ /a._property:n/
     | MIndex    MExp MExp  -- ^ /a[n]/
     deriving (Show, Eq)
+
+mid :: String -> MExp
+mid x = MVar (MId x)
+
+mprop :: MExp -> String -> MExp
+mprop x y = MVar (MProp x y)
+
 
 instance Pretty MPlugin where
     pretty (MPlugin n ds)   = string "{"
