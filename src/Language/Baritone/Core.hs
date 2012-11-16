@@ -205,12 +205,12 @@ toCore (HsModule l n es is as) = BModule (handleName n) (handleImports is) (hand
         -- TODO proper matching
 
         transQName :: HsQName -> BExp
-        transQName (Qual m n)                = notSupported "Qualified names" -- TODO
         transQName (UnQual n)                = BVar (getHsName n)
-        transQName (Special HsUnitCon)       = BInl "null"
-        transQName (Special HsListCon)       = BInl "CreateSparseArray()"
-        transQName (Special (HsTupleCon n))  = notSupported "Tuples"
-        transQName (Special HsFunCon)        = notSupported "Function types"
+        transQName (Qual m n)                = notSupported "Qualified names"
+        transQName (Special HsUnitCon)       = notSupported "Unit constructor"
+        transQName (Special HsListCon)       = notSupported "List constructor"
+        transQName (Special (HsTupleCon n))  = notSupported "Tuple constructors"
+        transQName (Special HsFunCon)        = notSupported "Function type constructor"
         transQName (Special HsCons)          = notSupported "Cons expression"
 
         transLit :: HsLiteral -> BExp
@@ -369,12 +369,12 @@ data MStm
     | MWhile    MExp [MStm]                             -- ^ /test body/
     | MFor      MName MExp MExp (Maybe MExp) [MStm]     -- ^ /var from to step body/
     | MForEach  (Maybe MName) MName MExp [MStm]         -- ^ /type? var iterable body/
+    | MSwitch   MExp [(MExp, [MStm])] (Maybe [MStm])    -- ^ /disamb cases default/
     | MAssign   MVar MExp                               -- ^ /var expr/
     | MReturn   MExp                                    -- ^ /expr/
     | MExp      MExp                                    -- ^ /expr/
     | MEmpty
     deriving (Show, Eq)
-    --  | MSwitch   MExp [(MExp, [MStm])] (Maybe [MStm])  -- ^ /disamb cases default/
 
 data MExp
     = MOp1      MOpName MExp        -- ^ /op expr/
@@ -425,15 +425,21 @@ instance Pretty MStm where
         where clause            = pretty v
                                   <+> string "=" <+> pretty i
                                   <+> string "to" <+> pretty j
-                                  <+> maybe mempty (\k -> string "step" <+> pretty k) k
+                                  <+> maybe mempty ((string "step" <+>) . pretty) k
 
     pretty (MForEach t v u a)   = string "for" <+> string "each" <+> clause
                                   <//> string "{" <//> indent 1 (vcat $ map pretty a) <//> string "}"
-        where clause            = maybe mempty (\t -> pretty t) t
+        where clause            = maybe mempty pretty t
                                   <+> pretty v
                                   <+> string "in" <+> pretty u
 
-    -- pretty (MSwitch b cs d)     = error "TODO"
+    pretty (MSwitch a cs d)     = string "switch" <+> parens (pretty a)
+                                  <//> string "{" 
+                                  <//> indent 1 (vcat $ map caseClause cs)
+                                  <//> maybe mempty defaultClause d                                  
+                                  <//> string "}"
+        where caseClause (c,as) = string "case" <+> pretty c <+> braces (vcat $ map pretty as)
+              defaultClause as  = string "default" <+> braces (vcat $ map pretty as)
 
     pretty (MAssign n a)        = (pretty n <+> indent 10 (string "=" <+> pretty a) <-> string ";")
     pretty (MReturn a)          = (string "return" <+> pretty a) <> string ";"
