@@ -16,8 +16,8 @@ module Language.Baritone.Core (
          -- ** Predicates
          freeVars,
          isFreeIn,
-         isBAbs,
-         isBApp,
+         isAbstraction,
+         isApplication,
 
          -- ** Transformations
          compoundApp,
@@ -59,10 +59,10 @@ data BExp
     | BStr String
     deriving (Eq, Show)
 
-isBApp (BApp _ _) = True
-isBApp _          = False
-isBAbs (BAbs _ _) = True
-isBAbs _          = False
+isApplication (BApp _ _) = True
+isApplication _          = False
+isAbstraction (BAbs _ _) = True
+isAbstraction _          = False
 
 freeVars :: BExp -> [BName]
 freeVars (BVar n)    = [n]
@@ -73,15 +73,7 @@ freeVars _           = []
 isFreeIn :: BName -> BExp -> Bool
 isFreeIn n a = elem n (freeVars a)
 
-transform :: (BExp -> BExp) -> BModule -> BModule
-transform f (BModule n is ds) = BModule n is (map (t f) ds)
-    where
-        t f (BDecl n d) = BDecl n (f d)
-
-deep :: (BExp -> BExp) -> BExp -> BExp
-deep f (BApp a as) = BApp (f a) (map (deep f) as)
-deep f (BAbs ns a) = BAbs ns (f a)
-deep f x           = x
+-------------------------------------------------------------------------
 
 -- | 
 -- Transforms the given expression to use compound application, that is:
@@ -160,10 +152,15 @@ singleAbs = f
         f (BApp a as)           = BApp (f a) (map f as)
         f x                     = x
 
+-- |
+-- Run a transformation over all expressions in a module.
+transform :: (BExp -> BExp) -> BModule -> BModule
+transform f (BModule n is ds) = BModule n is (map (t f) ds)
+    where
+        t f (BDecl n d) = BDecl n (f d)
 
 
-
-
+-------------------------------------------------------------------------
 
 -- | The 'Pretty' instance generates valid Haskell for all Baritone language constructs.
 instance Pretty BModule where
@@ -193,8 +190,8 @@ instance Pretty BExp where
     pretty (BAbs ns a)  = (string "\\" <-> hsep (map string ns) <+> string "->") <+> pretty a
     pretty (BApp f as)  = hsep (map p $ f:as)
         where
-            p x | isBApp x  = parens (pretty x)
-                | isBAbs x  = parens (pretty x)
+            p x | isApplication x  = parens (pretty x)
+                | isAbstraction x  = parens (pretty x)
                 | otherwise = pretty x
 
 
