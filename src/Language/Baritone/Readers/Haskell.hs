@@ -72,7 +72,8 @@ transExp (HsParen a)               = transExp a
 
 -- core
 transExp (HsVar n)                 = transQName n
-transExp (HsApp f a)               = BApp (transExp f) [transExp a]
+transExp (HsApp f a) | isInline f  = transInline a
+                     | otherwise   = BApp (transExp f) [transExp a]
 transExp (HsNegApp a)              = BApp (BVar "__neg") [transExp a]
 transExp (HsInfixApp a f b)        = BApp (transQName . getHsQOp $ f) [transExp a, transExp b]
 transExp (HsLeftSection a f)       = BApp (transQName . getHsQOp $ f) [transExp a]
@@ -110,6 +111,10 @@ transExp (HsIrrPat a)              = notSupported "Irrefutable patterns"
 
 -----------------------------------------------------------------
 
+transInline :: HsExp -> BExp
+transInline (HsList ((HsLit (HsString c)):as)) = BInl c (map transExp as)
+transInline _ = error "Inline needs a list of code and arguments"
+
 transQName :: HsQName -> BExp
 transQName (UnQual n)                = BVar (getHsName n)
 transQName (Qual m n)                = notSupported "Qualified names"
@@ -125,6 +130,9 @@ transLit (HsString s)	= BStr s
 transLit (HsInt i)	    = BNum (fromIntegral i)
 transLit (HsFrac r)	    = BNum (fromRational r)
 transLit _              = notSupported "Unboxed literals"
+
+isInline (HsVar (UnQual (HsIdent "inline"))) = True
+isInline _                                   = False
 
 getHsQOp (HsQVarOp n)  = n
 getHsQOp (HsQConOp n)  = n

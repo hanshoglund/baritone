@@ -71,6 +71,7 @@ freeVars :: BExp -> [BName]
 freeVars (BVar n)    = [n]
 freeVars (BApp f as) = freeVars f `union` concatMap freeVars as
 freeVars (BAbs ns a) = freeVars a \\ ns
+freeVars (BInl c as) = concatMap freeVars as
 freeVars _           = []
 
 isFreeIn :: BName -> BExp -> Bool

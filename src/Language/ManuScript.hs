@@ -137,7 +137,7 @@ instance Pretty MExp where
     pretty (MOp1 n a)   = pretty n <+> pretty a
     pretty (MOp2 n a b) = pretty a <+> string n <+> pretty b
     pretty (MCall n as) = pretty n <> parens (sepBy (string ", ") $ map pretty as)
-    pretty (MInl c as)  = string c <> parens (sepBy (string ", ") $ map pretty as)
+    pretty (MInl c as)  = hcat $ interfold (map string $ splitOn "x" c) (map pretty as)
     pretty (MVar n)     = pretty n
     pretty (MStr s)     = quotes (string $ s) -- TODO proper escaping
     pretty (MNum a)     = double a
@@ -191,4 +191,7 @@ createPlugin = MPlugin "" . execMGen
 
 indent n = nest (4 * n)
 concatWith x = mconcat . intersperse x
+interleave as bs = concat $ zipWith (\x y -> [x,y]) as bs
+interfold as bs = interleave as bs ++ take 1 (drop (length bs) as)
+
 
