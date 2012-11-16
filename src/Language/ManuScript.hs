@@ -137,7 +137,7 @@ instance Pretty MExp where
     pretty (MOp1 n a)   = pretty n <+> pretty a
     pretty (MOp2 n a b) = pretty a <+> string n <+> pretty b
     pretty (MCall n as) = pretty n <> parens (sepBy (string ", ") $ map pretty as)
-    pretty (MInl c as)  = hcat $ interfold (map string $ splitOn "x" c) (map pretty as)
+    pretty (MInl c as)  = hcat $ interfold (map string $ splitOn "$" c) (map pretty as)
     pretty (MVar n)     = pretty n
     pretty (MStr s)     = quotes (string $ s) -- TODO proper escaping
     pretty (MNum a)     = double a
