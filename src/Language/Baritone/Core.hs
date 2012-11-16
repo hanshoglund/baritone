@@ -100,17 +100,17 @@ toCore (HsModule l n es is as)
         transModName (Module n) = splitOn "." n
 
         transExSpec :: HsExportSpec -> ()
-        transExSpec = notSupported
+        transExSpec = notSupported "Export list"
         -- TODO handle export spec (by renaming?)
 
         transImSpec :: HsImportDecl -> BImp
-        transImSpec = notSupported
+        transImSpec = notSupported "Import declaration"
         -- TODO name resolution/mangling
 
         transDec :: HsDecl -> BValue
         transDec (HsPatBind l p a ws)              = transPatBind p a ws
         transDec (HsFunBind [HsMatch l n ps a ws]) = translateFunBind n ps a ws
-        transDec _                                 = notSupported
+        transDec _                                 = notSupported "Type, class or instance declaration"
         -- TODO multiple match clauses
 
         transPatBind :: HsPat -> HsRhs -> [HsDecl] -> BValue
@@ -122,7 +122,7 @@ toCore (HsModule l n es is as)
 
         transRhs :: HsRhs -> BExp
         transRhs (HsUnGuardedRhs a) = transExp a
-        transRhs _                  = notSupported
+        transRhs _                  = notSupported "Guards"
 
 
 
@@ -142,52 +142,52 @@ toCore (HsModule l n es is as)
         transExp (HsLit l)                 = transLit l
 
         -- special
-        transExp (HsCon n)                 = notSupported
-        transExp (HsTuple as)              = notSupported
-        transExp (HsList as)               = notSupported
-        transExp (HsLet ds a)              = notSupported
-        transExp (HsIf p a b)              = notSupported
-        transExp (HsCase p as)             = notSupported
-        transExp (HsDo as)                 = notSupported
+        transExp (HsCon n)                 = notSupported "Constructors"
+        transExp (HsTuple as)              = notSupported "Tuples"
+        transExp (HsList as)               = notSupported "Lists"
+        transExp (HsLet ds a)              = notSupported "Let-expressions"
+        transExp (HsIf p a b)              = notSupported "If-expressions"
+        transExp (HsCase p as)             = notSupported "Case-expressions"
+        transExp (HsDo as)                 = notSupported "Do-expressions"
 
         -- sugar
-        transExp (HsRecConstr n m)         = notSupported
-        transExp (HsRecUpdate n m)         = notSupported
-        transExp (HsEnumFrom a)            = notSupported
-        transExp (HsEnumFromTo a b)        = notSupported
-        transExp (HsEnumFromThen a b)      = notSupported
-        transExp (HsEnumFromThenTo a b c)  = notSupported
-        transExp (HsListComp a as)         = notSupported
+        transExp (HsRecConstr n m)         = notSupported "Records"
+        transExp (HsRecUpdate n m)         = notSupported "Records"
+        transExp (HsEnumFrom a)            = notSupported "Enum syntax"
+        transExp (HsEnumFromTo a b)        = notSupported "Enum syntax"
+        transExp (HsEnumFromThen a b)      = notSupported "Enum syntax"
+        transExp (HsEnumFromThenTo a b c)  = notSupported "Enum syntax"
+        transExp (HsListComp a as)         = notSupported "List comprehensions"
 
         -- types
-        transExp (HsExpTypeSig l a t)      = notSupported
+        transExp (HsExpTypeSig l a t)      = notSupported "Type signature"
 
         -- patterns
-        transExp (HsAsPat n a)             = notSupported
-        transExp (HsWildCard)              = notSupported
-        transExp (HsIrrPat a)              = notSupported
+        transExp (HsAsPat n a)             = notSupported "As-patterns"
+        transExp (HsWildCard)              = notSupported "Wildcards"
+        transExp (HsIrrPat a)              = notSupported "Irrefutable patterns"
 
 
         transPat :: HsPat -> BName
         transPat (HsPVar n) = getHsName n
-        transPat _          = notSupported
+        transPat _          = notSupported "Destruction"
         -- TODO proper matching
 
         transQName :: HsQName -> BExp
-        transQName (Qual m n)                = notSupported -- TODO
+        transQName (Qual m n)                = notSupported "Qualified names" -- TODO
         transQName (UnQual n)                = BVar (getHsName n)
         transQName (Special HsUnitCon)       = BInl "null"
         transQName (Special HsListCon)       = BInl "CreateSparseArray()"
-        transQName (Special (HsTupleCon n))  = notSupported
-        transQName (Special HsFunCon)        = notSupported
-        transQName (Special HsCons)          = notSupported
+        transQName (Special (HsTupleCon n))  = notSupported "Tuples"
+        transQName (Special HsFunCon)        = notSupported "Function types"
+        transQName (Special HsCons)          = notSupported "Cons expression"
 
         transLit :: HsLiteral -> BExp
         transLit (HsChar c)     = BStr [c]
         transLit (HsString s)	= BStr s
         transLit (HsInt i)	    = BNum (fromIntegral i)
         transLit (HsFrac r)	    = BNum (fromRational r)
-        transLit _              = notSupported
+        transLit _              = notSupported "Unboxed literals"
 
         getHsQOp (HsQVarOp n)  = n
         getHsQOp (HsQConOp n)  = n
@@ -197,7 +197,7 @@ toCore (HsModule l n es is as)
         -- wrapOp (BVar x) = BVar $ "(" ++ x ++ ")"
         -- wrapOp x        = x
 
-        notSupported = error "This Haskell feature is not supported"
+        notSupported m = error $ "Unsupported Haskell feature: " ++ m
 
 -------------------------------------------------------------------------
 -- Core to ManuScript
@@ -236,11 +236,12 @@ fromCore (BModule n is as)
 
         transExp :: Bool -> BExp -> MGen MExp
         transExp isTop (BVar n) = do
-            return $ MVar (MProp (MVar $ MId ctName) n)
+            let context = if isTop then MSelf else MVar (MId ctName)
+            return $ MVar (MProp context n)
 
         transExp isTop (BApp f as) = do
-            f'  <- transExp False f
-            as' <- mapM (transExp False) as
+            f'  <- transExp isTop f
+            as' <- mapM (transExp isTop) as
             return $ MCall (MVar $ MProp f' apName) as'
 
         transExp isTop (BAbs ns a) = do
