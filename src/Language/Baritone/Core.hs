@@ -29,12 +29,12 @@ module Language.Baritone.Core (
          addMethod,
          addUniqueMethod,
          createPlugin,
-         
+
          -- ** Haskell to core translation
-         toCore,         
+         toCore,
 
          -- ** Core to ManuScript translation
-         fromCore         
+         fromCore
   ) where
 
 import Language.Haskell.Syntax
@@ -59,7 +59,7 @@ data BImp = BImp BModuleName [BName] (Maybe BName) -- ^ /name hiding alias/
 data BDecl = BDecl String BExp
     deriving (Eq, Show)
 
-data BExp                 
+data BExp
     = BVar BName        -- ^ /name/
     | BApp BExp [BExp]  -- ^ /function arguments/
     | BAbs [BName] BExp -- ^ /bindings body/
@@ -93,7 +93,7 @@ instance Pretty BModule where
                                     <//> vcat (map pretty as)
 -- | The 'Pretty' instance generates valid Haskell for all Baritione language constructs.
 instance Pretty BImp where
-    pretty (BImp n hs a) = string "import" <+> string "hiding" 
+    pretty (BImp n hs a) = string "import" <+> string "hiding"
                                            <+> parens (sepBy (string ",") $ map pretty hs)
                                            <+> string "as" <+> maybe mempty string a
 -- | The 'Pretty' instance generates valid Haskell for all Baritione language constructs.
@@ -116,47 +116,59 @@ instance Pretty BExp where
 -- Haskell to Core
 -------------------------------------------------------------------------
 
--- | 
+-- |
 -- Compiles a Haskell module into a Baritone module.
 --
 toCore :: HsModule -> BModule
 toCore (HsModule l n es is as) = BModule (handleName n) (handleImports is) (handleDeclarations as)
+
     where
+
         handleName          = transModName
         handleImports       = map transImSpec
         handleDeclarations  = map transDec
-
 
         transModName :: Module -> BModuleName
         transModName (Module n) = splitOn "." n
 
         transExSpec :: HsExportSpec -> ()
         transExSpec = notSupported "Export list"
-        -- TODO handle export spec (by renaming?)
 
         transImSpec :: HsImportDecl -> BImp
         transImSpec = notSupported "Import declaration"
-        -- TODO name resolution/mangling
 
+
+        -----------------------------------------------------------------
+        
         transDec :: HsDecl -> BDecl
         transDec (HsPatBind l p a ws)              = transPatBind p a ws
+            where
+                transPatBind :: HsPat -> HsRhs -> [HsDecl] -> BDecl
+                transPatBind p a [] = BDecl (transPat p) (transRhs a)
+                transPatBind _ _ _  = notSupported "With clause"
+
         transDec (HsFunBind [HsMatch l n ps a ws]) = translateFunBind n ps a ws
-        transDec _                                 = notSupported "Type, class or instance declaration"
-        -- TODO multiple match clauses
+            where
+                translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BDecl
+                translateFunBind n ps a ws = BDecl (getHsName n) (BAbs (map transPat ps) (transRhs a))
 
-        transPatBind :: HsPat -> HsRhs -> [HsDecl] -> BDecl
-        transPatBind p a ws = BDecl (transPat p) (transRhs a)
-        -- TODO with clause
+        transDec (HsFunBind _)             = notSupported "Multiple bindings"
+        transDec _                         = notSupported "Type, class or instance declaration"
+        
+        -----------------------------------------------------------------
 
-        translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BDecl
-        translateFunBind n ps a ws = BDecl (getHsName n) (BAbs (map transPat ps) (transRhs a))
+
+        transPat :: HsPat -> BName
+        transPat (HsPVar n) = getHsName n
+        transPat _          = notSupported "Pattern matching"
 
         transRhs :: HsRhs -> BExp
         transRhs (HsUnGuardedRhs a) = transExp a
         transRhs _                  = notSupported "Guards"
 
-
-
+        
+        -----------------------------------------------------------------
+        
         transExp :: HsExp -> BExp
         transExp (HsParen a)               = transExp a
 
@@ -176,9 +188,9 @@ toCore (HsModule l n es is as) = BModule (handleName n) (handleImports is) (hand
         transExp (HsCon n)                 = notSupported "Constructors"
         transExp (HsTuple as)              = notSupported "Tuples"
         transExp (HsList as)               = notSupported "Lists"
-        transExp (HsLet ds a)              = notSupported "Let-expressions"
         transExp (HsIf p a b)              = notSupported "If-expressions"
         transExp (HsCase p as)             = notSupported "Case-expressions"
+        transExp (HsLet ds a)              = notSupported "Let-expressions"
         transExp (HsDo as)                 = notSupported "Do-expressions"
 
         -- sugar
@@ -198,11 +210,7 @@ toCore (HsModule l n es is as) = BModule (handleName n) (handleImports is) (hand
         transExp (HsWildCard)              = notSupported "Wildcards"
         transExp (HsIrrPat a)              = notSupported "Irrefutable patterns"
 
-
-        transPat :: HsPat -> BName
-        transPat (HsPVar n) = getHsName n
-        transPat _          = notSupported "Destruction"
-        -- TODO proper matching
+        -----------------------------------------------------------------
 
         transQName :: HsQName -> BExp
         transQName (UnQual n)                = BVar (getHsName n)
@@ -225,9 +233,8 @@ toCore (HsModule l n es is as) = BModule (handleName n) (handleImports is) (hand
         getHsName (HsIdent n)  = n
         getHsName (HsSymbol n) = n
 
-        -- wrapOp (BVar x) = BVar $ "(" ++ x ++ ")"
-        -- wrapOp x        = x
-
+        -----------------------------------------------------------------
+        
         notSupported m = error $ "Unsupported Haskell feature: " ++ m
 
 -------------------------------------------------------------------------
@@ -267,7 +274,7 @@ fromCore (BModule n is as)
 
         transExp :: Bool -> BExp -> MGen MExp
         transExp isTop (BVar n) = do
-            let context = if isTop then MSelf else MVar (MId ctName)
+            let context = if isTop then MSelf else mid ctName
             return $ MVar (MProp context n)
 
         transExp isTop (BApp f as) = do
@@ -276,28 +283,27 @@ fromCore (BModule n is as)
             return $ MCall (MVar $ MProp f' apName) as'
 
         transExp isTop (BAbs ns a) = do
-            let context = if isTop then MSelf else MVar (MId ctName)
+            let context = if isTop then MSelf else mid ctName
             a' <- transExp False a
             invoke <- let
                 vars = [ctName] ++ ns
                 body =
-                    map (\n -> MAssign (MPropDef (MVar $ MId ctName) n) (MVar $ MId n)) ns
+                    map (\n -> MAssign (MPropDef (mid ctName) n) (mid n)) ns
                     ++
                     [MReturn a']
                 in addUniqueMethod vars body
             create <- let
                 vars = [ctName]
                 alloc = [
-                    MAssign (MId allocName) (MCall (MVar $ MId "CreateDictionary") [])
+                    MAssign (MId allocName) (MCall (mid "CreateDictionary") [])
                     ]
-                copy = map (\n -> MAssign (MPropDef (MVar $ MId allocName) n) (MVar $ (MProp (MVar $ MId ctName) n))) (freeVars a \\ ns)
+                copy = map (\n -> MAssign (MPropDef (mid allocName) n) (mprop (mid ctName) n)) (freeVars a \\ ns)
                 ret = [
-                    MExp (MCall (MVar $ MProp (MVar $ MId allocName) "SetMethod")
-                        [MStr apName, MSelf, MStr invoke]),
-                    MReturn (MVar $ MId allocName)
+                    MExp (MCall (mprop (mid allocName) "SetMethod") [MStr apName, MSelf, MStr invoke]),
+                    MReturn (mid allocName)
                     ]
                 in addUniqueMethod vars (alloc ++ copy ++ ret)
-            return $ MCall (MVar $ MId create) [context]
+            return $ MCall (mid create) [context]
 
         transExp _ (BNum a) = return $ MNum a
         transExp _ (BStr s) = return $ MStr s
@@ -310,6 +316,9 @@ fromCore (BModule n is as)
         fixPrimOps (BAbs ns a) = BAbs ns (fixPrimOps a)
         fixPrimOps x           = x
 
+        mid x     = MVar (MId x)
+        mprop x y = MVar (MProp x y)
+
         primOp :: BName -> BName
         primOp "(+)" = "__add"
         primOp "(-)" = "__sub"
@@ -321,24 +330,24 @@ fromCore (BModule n is as)
         primOp "/"   = "__div"
         primOp x     = x
 
-        ctName    = "__c"
-        allocName = "__k"
-        apName    = "__A"
+        ctName    = "c"
+        allocName = "k"
+        apName    = "A"
 
         -- FIXME has to be proper functions
 
         main :: [MDecl]
         main = [
-                MMethod "Run" [] [MExp $ MCall (MVar $ MProp (MVar $ MId "main") apName) []]
+                MMethod "Run" [] [MExp $ MCall (MVar $ MProp (mid "main") apName) []]
             ]
 
         primOps :: [MDecl]
         primOps
             = [
-                MMethod "add"   ["a", "b"] [MReturn $ MOp2 "+" (MVar $ MId "a") (MVar $ MId "b")],
-                MMethod "sub"   ["a", "b"] [MReturn $ MOp2 "-" (MVar $ MId "a") (MVar $ MId "b")],
-                MMethod "mul"   ["a", "b"] [MReturn $ MOp2 "*" (MVar $ MId "a") (MVar $ MId "b")],
-                MMethod "div"   ["a", "b"] [MReturn $ MOp2 "/" (MVar $ MId "a") (MVar $ MId "b")]
+                MMethod "add"   ["a", "b"] [MReturn $ MOp2 "+" (mid "a") (mid "b")],
+                MMethod "sub"   ["a", "b"] [MReturn $ MOp2 "-" (mid "a") (mid "b")],
+                MMethod "mul"   ["a", "b"] [MReturn $ MOp2 "*" (mid "a") (mid "b")],
+                MMethod "div"   ["a", "b"] [MReturn $ MOp2 "/" (mid "a") (mid "b")]
               ]
 
 -------------------------------------------------------------------------
@@ -434,9 +443,9 @@ instance Pretty MStm where
                                   <+> string "in" <+> pretty u
 
     pretty (MSwitch a cs d)     = string "switch" <+> parens (pretty a)
-                                  <//> string "{" 
+                                  <//> string "{"
                                   <//> indent 1 (vcat $ map caseClause cs)
-                                  <//> maybe mempty defaultClause d                                  
+                                  <//> maybe mempty defaultClause d
                                   <//> string "}"
         where caseClause (c,as) = string "case" <+> pretty c <+> braces (vcat $ map pretty as)
               defaultClause as  = string "default" <+> braces (vcat $ map pretty as)
@@ -503,6 +512,5 @@ createPlugin = MPlugin "" . execMGen
 -------------------------------------------------------------------------
 
 indent n = nest (4 * n)
-spaces x = mempty <+> x <+> mempty x
 concatWith x = mconcat . intersperse x
 
