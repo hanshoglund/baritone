@@ -80,9 +80,12 @@ transExp isTop (BAbs ns a) = do
         in addUniqueMethod vars (alloc ++ copy ++ ret)
     return $ MCall (mid create) [context]
 
-transExp _ (BNum a) = return $ MNum a
-transExp _ (BStr s) = return $ MStr s
-transExp _ (BInl c) = return $ MInl c
+transExp isTop (BInl c as) = do
+    as' <- mapM (transExp isTop) as
+    return $ MInl c as'
+
+transExp _ (BNum a)    = return $ MNum a
+transExp _ (BStr s)    = return $ MStr s
 
 
 fixPrimOps :: BExp -> BExp

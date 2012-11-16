@@ -67,8 +67,8 @@ data MExp
     = MOp1      MOpName MExp        -- ^ /op expr/
     | MOp2      MOpName MExp MExp   -- ^ /op expr expr/
     | MCall     MExp [MExp]         -- ^ /expr expr*/
+    | MInl      String [MExp]       -- ^ /code expr*/
     | MVar      MVar                -- ^ /var/
-    | MInl      String
     | MStr      String
     | MNum      Double
     | MBool     Bool
@@ -137,8 +137,8 @@ instance Pretty MExp where
     pretty (MOp1 n a)   = pretty n <+> pretty a
     pretty (MOp2 n a b) = pretty a <+> string n <+> pretty b
     pretty (MCall n as) = pretty n <> parens (sepBy (string ", ") $ map pretty as)
+    pretty (MInl c as)  = string c <> parens (sepBy (string ", ") $ map pretty as)
     pretty (MVar n)     = pretty n
-    pretty (MInl c)     = string c
     pretty (MStr s)     = quotes (string $ s) -- TODO proper escaping
     pretty (MNum a)     = double a
     pretty (MBool a)    = if a then string "true" else string "false"

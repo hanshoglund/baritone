@@ -51,10 +51,10 @@ data BDecl = BDecl String BExp
     deriving (Eq, Show)
 
 data BExp
-    = BVar BName        -- ^ /name/
-    | BApp BExp [BExp]  -- ^ /function arguments/
-    | BAbs [BName] BExp -- ^ /bindings+ body/
-    | BInl String
+    = BVar BName         -- ^ /name/
+    | BApp BExp [BExp]   -- ^ /function arguments+/
+    | BAbs [BName] BExp  -- ^ /bindings+ body/
+    | BInl String [BExp] -- ^ /code expressions+/
     | BNum Double
     | BStr String
     deriving (Eq, Show)
@@ -95,6 +95,7 @@ compoundApp = f
         f (BApp (BApp a as) bs) = f $ BApp a (map f $ as ++ bs)
         f (BApp a as)           = BApp (f a) (map f as)
         f (BAbs ns a)           = BAbs ns (f a)
+        f (BInl c as)           = BInl c (map f as)
         f x                     = x
 
 
@@ -115,6 +116,7 @@ singleApp = f
         f (BApp a [b])    = BApp (f a) [f b]
         f (BApp a (b:bs)) = f $ BApp (BApp a [b]) (map f bs)
         f (BAbs ns a)     = BAbs ns (f a)
+        f (BInl c as)     = BInl c (map f as)
         f x               = x
 
 -- | 
@@ -134,6 +136,7 @@ compoundAbs = f
         f (BAbs ms (BAbs ns a)) = BAbs (ms ++ ns) (f a)
         f (BAbs ns a)           = BAbs ns (f a)
         f (BApp a as)           = BApp (f a) (map f as)
+        f (BInl c as)           = BInl c (map f as)
         f x                     = x
 
 -- | 
@@ -153,6 +156,7 @@ singleAbs = f
         f (BAbs [n] a)          = BAbs [n] (f a)
         f (BAbs (n:ns) a)       = BAbs [n] (f $ BAbs ns a)
         f (BApp a as)           = BApp (f a) (map f as)
+        f (BInl c as)           = BInl c (map f as)
         f x                     = x
 
 -- |
@@ -186,14 +190,16 @@ instance Pretty BDecl where
 
 -- | The 'Pretty' instance generates valid Haskell for all Baritone language constructs.
 instance Pretty BExp where
-    pretty (BInl s)     = string "inline" <+> string s
     pretty (BNum n)     = string (show n)
     pretty (BStr s)     = string (show s)
     pretty (BVar n)     = string n
     pretty (BAbs ns a)  = (string "\\" <-> hsep (map string ns) <+> string "->") <+> pretty a
-    pretty (BApp f as)  = hsep (map p $ f:as)
-        where
-            p x | isApplication x  = parens (pretty x)
+    pretty (BInl s as)  = string "inline" <+> string s <+> hsep (map nestPrettyExpr $ as)
+    pretty (BApp f as)  = hsep (map nestPrettyExpr $ f:as)
+
+nestPrettyExpr = f
+    where
+            f x | isApplication x  = parens (pretty x)
                 | isAbstraction x  = parens (pretty x)
                 | otherwise = pretty x
 
