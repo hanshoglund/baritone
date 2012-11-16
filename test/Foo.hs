@@ -3,9 +3,9 @@ module Foo.Bar.Baz where
 
 -- A comment
 -- | This is one.
-__neg x = x
-__add x y = x
-__mul x y = x
+__neg a     = inline "-%" x
+__add a b   = inline "% + %" a b
+__mul a b   = inline "% * %" a b
 
 one = 1
 two = 2
@@ -17,13 +17,12 @@ id x          = x
 const x y     = x
 const2 x y z  = x
 
-comp1 f g x    = f (g x)
-comp2 = \f -> \g -> \x -> f (g x)
+comp1 f g x = f (g x)
 
 adder a b x = (a*x) + (b*x)
 add23 = adder 2 3
 
-main  = trace (add23 5)
+main = trace (add23 5)
 
 
 
