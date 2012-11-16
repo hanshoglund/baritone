@@ -42,7 +42,7 @@ transModName = concatWith "_"
 
 transValueDecl :: BDecl -> MGen ()
 transValueDecl (BDecl n a) = do
-    a' <- transExp True (fixPrimOps a)
+    a' <- transExp True (fixPrimOps $ a)
     addGlobal n a'
     return ()
 

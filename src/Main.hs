@@ -2,10 +2,16 @@
 module Main where
 
 import System.IO
+import System.Exit
+import System.Environment
+import System.Console.GetOpt
+
 import Text.Pretty
+
 import Language.Haskell.Parser
 import Language.Haskell.Syntax
 import Language.Baritone
+
 
 -- run as filter
 main = do
@@ -21,9 +27,12 @@ compileFile :: Handle -> Handle -> IO ()
 compileFile input output = do
     s <- hGetContents input
     let hs = parse s
-    let b  = fromHaskell hs
+    let b  = transform (singleApp . singleAbs) $ fromHaskell hs
     let ms = toManuScript b
     
+    hPutStr output $ show (pretty b)
+    hPutStr output "\n"
+    hPutStr output "\n"
     hPutStr output $ show (pretty ms)
     hPutStr output "\n"
     

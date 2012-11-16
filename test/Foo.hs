@@ -1,5 +1,5 @@
 
-module Foo where
+module Foo.Bar.Baz where
 
 -- A comment
 -- | This is one.
@@ -18,18 +18,30 @@ head    = 0
 tail    = 0
 map     = 0
 
-id x     = x
-const x  = \y -> x
-const2 x = \y -> \z -> x
-comp f g = \x -> f (g x)
+id x          = x
+const x y     = x
+const2 x y z  = x
 
--- adder a b = \x -> (a*x) + (b*x)
+comp f g x    = f (g x)
+
+
+comp = \f -> \g -> \x -> f (g x)
+
+adder a b x = (a*x) + (b*x)
+
 fibs = 0 `cons` 1 `cons` zipWith plus fibs (tail fibs)
 
-map f xs = if_ (isNull xs) null (cons (f `ap` head xs) (map f `ap` tail xs))
+-- map f xs = if_ (isNull xs) null (cons (f `ap` head xs) (map f `ap` tail xs))
+
+
+f = (a b c)  (\x -> a b x (c d x)) (\y -> \z -> m n y z)
+-- f           = (((a b) c) (\x -> ((a b) x) ((c d) x))) (\y -> \z -> ((m n) y) z)
+
+f x y z = z
+g x = \y z -> z
+h = \x -> \y -> \z -> z
+
     
-
-
 -- data Score
 -- data Selection
 -- data Staff
@@ -50,3 +62,7 @@ map f xs = if_ (isNull xs) null (cons (f `ap` head xs) (map f `ap` tail xs))
 -- data Text     
 -- data LyricItem
 -- data Comment
+
+
+
+
