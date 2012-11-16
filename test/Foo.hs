@@ -3,43 +3,38 @@ module Foo.Bar.Baz where
 
 -- A comment
 -- | This is one.
+__neg x = x
+__add x y = x
+__mul x y = x
+
 one = 1
 two = 2
 name = "hans"
 char = 'c'       
 negOne = (-1)
 
-add_    = 0
-zipWith = 0
-if_     = 0
-cons    = 0
-ap      = 0
-head    = 0
-tail    = 0
-map     = 0
-
 id x          = x
 const x y     = x
 const2 x y z  = x
 
-comp f g x    = f (g x)
-
-
-comp = \f -> \g -> \x -> f (g x)
+comp1 f g x    = f (g x)
+comp2 = \f -> \g -> \x -> f (g x)
 
 adder a b x = (a*x) + (b*x)
+add23 = adder 2 3
 
-fibs = 0 `cons` 1 `cons` zipWith plus fibs (tail fibs)
-
--- map f xs = if_ (isNull xs) null (cons (f `ap` head xs) (map f `ap` tail xs))
+main  = trace (add23 5)
 
 
-f = (a b c)  (\x -> a b x (c d x)) (\y -> \z -> m n y z)
+
+-- f = (a b c)  (\x -> a b x (c d x)) (\y -> \z -> m n y z)
 -- f           = (((a b) c) (\x -> ((a b) x) ((c d) x))) (\y -> \z -> ((m n) y) z)
 
-f x y z = z
-g x = \y z -> z
-h = \x -> \y -> \z -> z
+-- f x y z = z
+-- g x = \y z -> z
+-- h = \x -> \y -> \z -> z
+
+-- fibs = 0 `cons` 1 `cons` zipWith plus fibs (tail fibs)
 
     
 -- data Score
