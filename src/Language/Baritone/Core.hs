@@ -9,9 +9,9 @@ module Language.Baritone.Core (
          BImp(..),
          BDecl(..),
          BExp(..),
-         freeVars,
          isBAbs,
          isBApp,
+         freeVars,
          isFreeIn,
 
          -- ** ManuScript language
@@ -46,23 +46,23 @@ import Data.List.Split (splitOn)
 import Text.Pretty
 
 
-data BModule = BModule BModuleName [BImp] [BDecl]
+data BModule = BModule BModuleName [BImp] [BDecl] -- ^ /name imports declarations/
     deriving (Eq, Show)
 
 type BName = String
 
 type BModuleName = [BName]
 
-data BImp = BImp BModuleName [BName] (Maybe BName) -- name hiding alias
+data BImp = BImp BModuleName [BName] (Maybe BName) -- ^ /name hiding alias/
     deriving (Eq, Show)
 
 data BDecl = BDecl String BExp
     deriving (Eq, Show)
 
-data BExp
-    = BVar BName
-    | BApp BExp [BExp]
-    | BAbs [BName] BExp
+data BExp                 
+    = BVar BName        -- ^ /name/
+    | BApp BExp [BExp]  -- ^ /function arguments/
+    | BAbs [BName] BExp -- ^ /bindings body/
     | BInl String
     | BNum Double
     | BStr String
@@ -82,33 +82,35 @@ freeVars _           = []
 isFreeIn :: BName -> BExp -> Bool
 isFreeIn n a = elem n (freeVars a)
 
-instance Pretty BImp where
-    pretty (BImp n hs a) = string "import"
-                                    <+> string "hiding" <+> parens (sepBy (string ",") $ map pretty hs)
-                                    <+> string "as" <+> maybe mempty string a
-instance Pretty BDecl where
-    pretty (BDecl n a)     = string n </> nest 12 (string "=" <+> pretty a)
+
+
+-- | The 'Pretty' instance generates valid Haskell for all Baritione language constructs.
 instance Pretty BModule where
-    pretty (BModule n is as)    = string "module"
-                                    <+> string (concatWith "." n)
+    pretty (BModule n is as) = string "module" <+> string (concatWith "." n)
                                     <+> vcat (map pretty is)
                                     <+> string "where"
                                     <//> empty
                                     <//> vcat (map pretty as)
-instance Pretty BExp where
-    pretty (BVar n)     = string n
+-- | The 'Pretty' instance generates valid Haskell for all Baritione language constructs.
+instance Pretty BImp where
+    pretty (BImp n hs a) = string "import" <+> string "hiding" 
+                                           <+> parens (sepBy (string ",") $ map pretty hs)
+                                           <+> string "as" <+> maybe mempty string a
+-- | The 'Pretty' instance generates valid Haskell for all Baritione language constructs.
+instance Pretty BDecl where
+    pretty (BDecl n a) = string n </> nest 12 (string "=" <+> pretty a)
 
+-- | The 'Pretty' instance generates valid Haskell for all Baritione language constructs.
+instance Pretty BExp where
+    pretty (BInl s)     = string "inline" <+> string s
+    pretty (BNum n)     = string (show n)
+    pretty (BStr s)     = string (show s)
+    pretty (BVar n)     = string n
+    pretty (BAbs ns a)  = (string "\\" <-> hsep (map string ns) <+> string "->") <+> pretty a
     pretty (BApp f as)  = hsep (map p $ f:as)
         where
             p x | isBApp x  = parens (pretty x)
                 | otherwise = pretty x
-
-    pretty (BAbs ns a)  = (string "\\" <-> hsep (map string ns) <+> string "->")
-                            <+> pretty a
-
-    pretty (BInl s)     = string "inline" <+> string s
-    pretty (BNum n)     = string (show n)
-    pretty (BStr s)     = string (show s)
 
 -------------------------------------------------------------------------
 -- Haskell to Core
