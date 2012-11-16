@@ -1,6 +1,7 @@
 
 module Main where
 
+import Control.Monad (when)
 import System.IO
 import System.Exit
 import System.Environment
@@ -12,28 +13,66 @@ import Language.Haskell.Parser
 import Language.Haskell.Syntax
 import Language.Baritone
 
+data BarOpt
+    = Help    
+    | Version
+    | IncludeCore
+    deriving (Eq, Show)
 
--- run as filter
+version = "baritone"
+header  = "Usage: baritone [options] files...\n" ++
+          "Options:"
+
+options = [ 
+    (Option ['h'] ["help"]          (NoArg Help)        "Print help and exit"),
+    (Option ['v'] ["version"]       (NoArg Version)     "Print version and exit"),
+    (Option []    ["include-core"]  (NoArg IncludeCore) "Include core in output")
+  ]
+
+usage = usageInfo header options
+    
 main = do
-    compileFile stdin stdout
+    (opts, args, optErrs) <- getOpt Permute options `fmap` getArgs
 
-parse :: String -> HsModule
-parse s = case (parseModule s) of
-    ParseOk hs -> hs
-    ParseFailed (SrcLoc f l c) e -> error $ f ++ ":" ++ show l ++ ":" ++ show c ++ ": " ++ e
+    when (Help `elem` opts) $ do
+        putStr (usage ++ "\n")
+        exitWith ExitSuccess
 
--- compile a single file (to core for now)
-compileFile :: Handle -> Handle -> IO ()
-compileFile input output = do
+    when (Version `elem` opts) $ do
+        putStr (version ++ "\n")
+        exitWith ExitSuccess
+  
+    runFilter opts
+
+
+
+
+
+
+
+
+
+runFilter opts = compileFile opts stdin stdout
+
+compileFile :: [BarOpt] -> Handle -> Handle -> IO ()
+compileFile opts input output = do
     s <- hGetContents input
     let hs = parse s
     let b  = transform (singleApp . singleAbs) $ fromHaskell hs
     let ms = toManuScript b
     
-    hPutStr output $ show (pretty b)
-    hPutStr output "\n"
-    hPutStr output "\n"
+    when (IncludeCore `elem` opts) $ do
+        hPutStr output $ show (pretty b)
+        hPutStr output "\n"
+        hPutStr output "\n"
+    
     hPutStr output $ show (pretty ms)
     hPutStr output "\n"
     
     return ()
+
+    where
+        parse :: String -> HsModule
+        parse s = case (parseModule s) of
+            ParseOk hs -> hs
+            ParseFailed (SrcLoc f l c) e -> error $ f ++ ":" ++ show l ++ ":" ++ show c ++ ": " ++ e
