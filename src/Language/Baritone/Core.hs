@@ -1,7 +1,41 @@
 
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Language.Baritone.Core where
+module Language.Baritone.Core (
+         -- ** Baritone core language
+         BModule(..),
+         BName(..),
+         BModuleName(..),
+         BImp(..),
+         BDecl(..),
+         BExp(..),
+         freeVars,
+         isBAbs,
+         isBApp,
+         isFreeIn,
+
+         -- ** ManuScript language
+         MPlugin(..),
+         MName(..),
+         MOpName(..),
+         MDecl(..),
+         MStm(..),
+         MExp(..),
+         MVar(..),
+         isMGlobal,
+         -- *** Code generation monad
+         MGen(..),
+         addGlobal,
+         addMethod,
+         addUniqueMethod,
+         execMGen,
+         
+         -- ** Haskell to core translation
+         toCore,         
+
+         -- ** Core to ManuScript translation
+         fromCore         
+  ) where
 
 import Language.Haskell.Syntax
 import Control.Monad.Writer hiding ((<>))
@@ -12,25 +46,18 @@ import Data.List.Split (splitOn)
 import Text.Pretty
 
 
-type BName = String -- unqualified
-type BModuleName = [String]
+data BModule = BModule BModuleName [BImp] [BDecl]
+    deriving (Eq, Show)
 
-data BImp
-    = BImp
-        BModuleName
-        [BName]
-        (Maybe BName) -- name hiding alias
+type BName = String
 
-data BDecl =
-    BDecl
-        String
-        BExp
+type BModuleName = [BName]
 
-data BModule
-    = BModule
-        BModuleName
-        [BImp]
-        [BDecl]
+data BImp = BImp BModuleName [BName] (Maybe BName) -- name hiding alias
+    deriving (Eq, Show)
+
+data BDecl = BDecl String BExp
+    deriving (Eq, Show)
 
 data BExp
     = BVar BName
@@ -39,6 +66,8 @@ data BExp
     | BInl String
     | BNum Double
     | BStr String
+    deriving (Eq, Show)
+
 isBApp (BApp _ _) = True
 isBApp _          = False
 isBAbs (BAbs _ _) = True
@@ -52,11 +81,6 @@ freeVars _           = []
 
 isFreeIn :: BName -> BExp -> Bool
 isFreeIn n a = elem n (freeVars a)
-
-deriving instance Show BImp
-deriving instance Show BDecl
-deriving instance Show BModule
-deriving instance Show BExp
 
 instance Pretty BImp where
     pretty (BImp n hs a) = string "import"
@@ -73,28 +97,33 @@ instance Pretty BModule where
                                     <//> vcat (map pretty as)
 instance Pretty BExp where
     pretty (BVar n)     = string n
-    pretty (BApp f as)  = hsep (map pretty' $ f:as)
+
+    pretty (BApp f as)  = hsep (map p $ f:as)
+        where
+            p x | isBApp x  = parens (pretty x)
+                | otherwise = pretty x
+
     pretty (BAbs ns a)  = (string "\\" <-> hsep (map string ns) <+> string "->")
                             <+> pretty a
+
     pretty (BInl s)     = string "inline" <+> string s
     pretty (BNum n)     = string (show n)
     pretty (BStr s)     = string (show s)
 
-pretty' x | isBApp x  = parens (pretty x)
-          | otherwise = pretty x
 -------------------------------------------------------------------------
 -- Haskell to Core
 -------------------------------------------------------------------------
 
--- | Compile a Haskell module into a Baritone module.
+-- | 
+-- Compiles a Haskell module into a Baritone module.
+--
 toCore :: HsModule -> BModule
-toCore (HsModule l n es is as)
-    = BModule
-        (transModName n)
-        (map transImSpec is)
-        (map transDec as)
-
+toCore (HsModule l n es is as) = BModule (handleName n) (handleImports is) (handleDeclarations as)
     where
+        handleName          = transModName
+        handleImports       = map transImSpec
+        handleDeclarations  = map transDec
+
 
         transModName :: Module -> BModuleName
         transModName (Module n) = splitOn "." n
@@ -203,7 +232,7 @@ toCore (HsModule l n es is as)
 -- Core to ManuScript
 -------------------------------------------------------------------------
 
--- | Compile a Baritone module into a ManuScript plugin.
+-- | Compile a Baritone module into a ManuScript plugin.
 fromCore :: BModule -> MPlugin
 fromCore (BModule n is as)
     = MPlugin
@@ -219,7 +248,7 @@ fromCore (BModule n is as)
                 (gs, ms) = partition isMGlobal xs
 
                 handleGlobals :: [MDecl] -> [MDecl]
-                handleGlobals x = [MMethod "Initialize" [] (mconcat $ map toSelfAssign x)]
+                handleGlobals x = [MMethod "Initialize" [] (mconcat $ map toSelfAssign x)]
 
                 toSelfAssign :: MDecl -> [MStm]
                 toSelfAssign (MGlobal n a) = [MAssign (MPropDef MSelf n) a]
@@ -247,10 +276,10 @@ fromCore (BModule n is as)
         transExp isTop (BAbs ns a) = do
             let context = if isTop then MSelf else MVar (MId ctName)
             a' <- transExp False a
-            invoke <- let         
+            invoke <- let
                 vars = [ctName] ++ ns
-                body = 
-                    map (\n -> MAssign (MPropDef (MVar $ MId ctName) n) (MVar $ MId n)) ns 
+                body =
+                    map (\n -> MAssign (MPropDef (MVar $ MId ctName) n) (MVar $ MId n)) ns
                     ++
                     [MReturn a']
                 in addUniqueMethod vars body
@@ -259,9 +288,9 @@ fromCore (BModule n is as)
                 alloc = [
                     MAssign (MId allocName) (MCall (MVar $ MId "CreateDictionary") [])
                     ]
-                copy = map (\n -> MAssign (MPropDef (MVar $ MId allocName) n) (MVar $ (MProp (MVar $ MId ctName) n))) (freeVars a \\ ns) 
+                copy = map (\n -> MAssign (MPropDef (MVar $ MId allocName) n) (MVar $ (MProp (MVar $ MId ctName) n))) (freeVars a \\ ns)
                 ret = [
-                    MExp (MCall (MVar $ MProp (MVar $ MId allocName) "SetMethod") 
+                    MExp (MCall (MVar $ MProp (MVar $ MId allocName) "SetMethod")
                         [MStr apName, MSelf, MStr invoke]),
                     MReturn (MVar $ MId allocName)
                     ]
@@ -289,21 +318,21 @@ fromCore (BModule n is as)
         primOp "*"   = "__mul"
         primOp "/"   = "__div"
         primOp x     = x
-        
+
         ctName    = "__c"
         allocName = "__k"
         apName    = "__A"
-        
+
         -- FIXME has to be proper functions
-        
+
         main :: [MDecl]
         main = [
-                MMethod "Run" [] [MExp $ MCall (MVar $ MProp (MVar $ MId "main") apName) []]
+                MMethod "Run" [] [MExp $ MCall (MVar $ MProp (MVar $ MId "main") apName) []]
             ]
-        
+
         primOps :: [MDecl]
-        primOps 
-            = [ 
+        primOps
+            = [
                 MMethod "add"   ["a", "b"] [MReturn $ MOp2 "+" (MVar $ MId "a") (MVar $ MId "b")],
                 MMethod "sub"   ["a", "b"] [MReturn $ MOp2 "-" (MVar $ MId "a") (MVar $ MId "b")],
                 MMethod "mul"   ["a", "b"] [MReturn $ MOp2 "*" (MVar $ MId "a") (MVar $ MId "b")],
@@ -314,16 +343,16 @@ fromCore (BModule n is as)
 -- ManuScript
 -------------------------------------------------------------------------
 
--- http://www.simkin.co.uk/Docs/java/index.html
-
-type MName = String    -- unqualified
-type MOpName = String
-
-data MPlugin
-    = MPlugin
-        MName
-        [MDecl]
+-- |
+-- A ManuScript plugin
+--
+-- See <http://www.simkin.co.uk/Docs/java>
+--
+data MPlugin = MPlugin MName [MDecl]
     deriving (Show, Eq)
+
+type MName   = String
+type MOpName = String
 
 data MDecl
     = MGlobal MName MExp            -- name body
@@ -355,7 +384,7 @@ data MExp
     | MNum      Double
     | MBool     Bool
     | MSelf
-    | MNull
+    | MNull
     deriving (Show, Eq)
 
 data MVar
@@ -364,19 +393,21 @@ data MVar
     | MPropDef  MExp MName -- ^ @a._property:n@
     | MIndex    MExp MExp  -- ^ @a[n]@
     deriving (Show, Eq)
+
 instance Pretty MPlugin where
-    pretty (MPlugin n ds)   = string "{"  
+    pretty (MPlugin n ds)   = string "{"
                                 <//> vcat (map pretty ds)
                                 <//> string "}"
 
 instance Pretty MDecl where
-    pretty (MGlobal n a)    = string n <+> doubleQuotes (asStr a)
+    pretty (MGlobal n a) = string n <+> doubleQuotes (f a)
         where
-            asStr (MStr s) = string s
-            asStr a        = pretty a
-    pretty (MMethod n vs a) = string n <+> string "\"" <-> parens (sepBy (string ", ") $ map string vs) <+> string "{"
-                                    <//> indent 2 (vcat $ map pretty a) 
-                                    <//> indent 1 (string "}" <-> string "\"") 
+            f (MStr s) = string s
+            f a        = pretty a
+
+    pretty (MMethod n vs a)     = string n <+> string "\"" <-> parens (sepBy (string ", ") $ map string vs) <+> string "{"
+                                    <//> indent 2 (vcat $ map pretty a)
+                                    <//> indent 1 (string "}" <-> string "\"")
 
 instance Pretty MStm where
     pretty (MIf p a b)          = string "if" <+> parens (pretty p)
@@ -429,9 +460,12 @@ instance Pretty MVar where
 -------------------------------------------------------------------------
 
 -- |
--- Plugin generation monad including:
---  * A state for counting the number of generated functions
---  * A writer for collecting the generated functions
+-- Plugin generation monad, including:
+--
+--  * 'State' for counting the number of generated functions
+--
+--  * 'WriterT' for collecting the generated functions
+--
 type MGen = WriterT [MDecl] (State Int)
 
 addGlobal :: MName -> MExp -> MGen ()
@@ -456,8 +490,6 @@ execMGen :: MGen () -> [MDecl]
 execMGen x = evalState (execWriterT x) 0
 
 -------------------------------------------------------------------------
-
-
 
 indent n = nest (4 * n)
 spaces x = mempty <+> x <+> mempty x
