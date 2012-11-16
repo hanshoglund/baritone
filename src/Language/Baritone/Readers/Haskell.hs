@@ -38,11 +38,8 @@ transExSpec = notSupported "Export list"
 transImSpec :: HsImportDecl -> BImp
 transImSpec = notSupported "Import declaration"
 
-
------------------------------------------------------------------
-
 transDec :: HsDecl -> BDecl
-transDec (HsPatBind l p a ws)              = transPatBind p a ws
+transDec (HsPatBind l p a ws) = transPatBind p a ws
     where
         transPatBind :: HsPat -> HsRhs -> [HsDecl] -> BDecl
         transPatBind p a [] = BDecl (transPat p) (transRhs a)
@@ -53,8 +50,8 @@ transDec (HsFunBind [HsMatch l n ps a ws]) = translateFunBind n ps a ws
         translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BDecl
         translateFunBind n ps a ws = BDecl (getHsName n) (BAbs (map transPat ps) (transRhs a))
 
-transDec (HsFunBind _)             = notSupported "Multiple bindings"
-transDec _                         = notSupported "Type, class or instance declaration"
+transDec (HsFunBind _) = notSupported "Multiple bindings"
+transDec _             = notSupported "Type, class or instance declaration"
 
 -----------------------------------------------------------------
 

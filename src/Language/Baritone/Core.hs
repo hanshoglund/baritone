@@ -59,11 +59,11 @@ data BExp
     | BStr String
     deriving (Eq, Show)
 
-isApplication :: BExpr -> Bool
+isApplication :: BExp -> Bool
 isApplication (BApp _ _) = True
 isApplication _          = False
 
-isAbstraction :: BExpr -> Bool
+isAbstraction :: BExp -> Bool
 isAbstraction (BAbs _ _) = True
 isAbstraction _          = False
 
