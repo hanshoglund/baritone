@@ -21,8 +21,8 @@ compileFile :: Handle -> Handle -> IO ()
 compileFile input output = do
     s <- hGetContents input
     let hs = parse s
-    let b  = toCore hs
-    let ms = fromCore b
+    let b  = fromHaskell hs
+    let ms = toManuScript b
     
     hPutStr output $ show (pretty ms)
     hPutStr output "\n"

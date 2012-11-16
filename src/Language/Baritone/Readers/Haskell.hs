@@ -1,7 +1,7 @@
 
 module Language.Baritone.Readers.Haskell (
          -- ** Haskell to core translation
-         toCore,
+         fromHaskell,
 
   ) where
 
@@ -21,8 +21,8 @@ import Language.Haskell.Syntax
 -- |
 -- Compiles a Haskell module into a Baritone module.
 --
-toCore :: HsModule -> BModule
-toCore (HsModule l n es is as) = BModule (handleName n) (handleImports is) (handleDeclarations as)
+fromHaskell :: HsModule -> BModule
+fromHaskell (HsModule l n es is as) = BModule (handleName n) (handleImports is) (handleDeclarations as)
 
     where
 
