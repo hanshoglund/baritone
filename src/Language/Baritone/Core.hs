@@ -21,8 +21,8 @@ data BImp
         [BName]
         (Maybe BName) -- name hiding alias
 
-data BValue =
-    BValue
+data BDecl =
+    BDecl
         String
         BExp
 
@@ -30,7 +30,7 @@ data BModule
     = BModule
         BModuleName
         [BImp]
-        [BValue]
+        [BDecl]
 
 data BExp
     = BVar BName
@@ -54,7 +54,7 @@ isFreeIn :: BName -> BExp -> Bool
 isFreeIn n a = elem n (freeVars a)
 
 deriving instance Show BImp
-deriving instance Show BValue
+deriving instance Show BDecl
 deriving instance Show BModule
 deriving instance Show BExp
 
@@ -62,8 +62,8 @@ instance Pretty BImp where
     pretty (BImp n hs a) = string "import"
                                     <+> string "hiding" <+> parens (sepBy (string ",") $ map pretty hs)
                                     <+> string "as" <+> maybe mempty string a
-instance Pretty BValue where
-    pretty (BValue n a)     = string n </> nest 12 (string "=" <+> pretty a)
+instance Pretty BDecl where
+    pretty (BDecl n a)     = string n </> nest 12 (string "=" <+> pretty a)
 instance Pretty BModule where
     pretty (BModule n is as)    = string "module"
                                     <+> string (concatWith "." n)
@@ -107,18 +107,18 @@ toCore (HsModule l n es is as)
         transImSpec = notSupported "Import declaration"
         -- TODO name resolution/mangling
 
-        transDec :: HsDecl -> BValue
+        transDec :: HsDecl -> BDecl
         transDec (HsPatBind l p a ws)              = transPatBind p a ws
         transDec (HsFunBind [HsMatch l n ps a ws]) = translateFunBind n ps a ws
         transDec _                                 = notSupported "Type, class or instance declaration"
         -- TODO multiple match clauses
 
-        transPatBind :: HsPat -> HsRhs -> [HsDecl] -> BValue
-        transPatBind p a ws = BValue (transPat p) (transRhs a)
+        transPatBind :: HsPat -> HsRhs -> [HsDecl] -> BDecl
+        transPatBind p a ws = BDecl (transPat p) (transRhs a)
         -- TODO with clause
 
-        translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BValue
-        translateFunBind n ps a ws = BValue (getHsName n) (BAbs (map transPat ps) (transRhs a))
+        translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BDecl
+        translateFunBind n ps a ws = BDecl (getHsName n) (BAbs (map transPat ps) (transRhs a))
 
         transRhs :: HsRhs -> BExp
         transRhs (HsUnGuardedRhs a) = transExp a
@@ -132,7 +132,7 @@ toCore (HsModule l n es is as)
         -- core
         transExp (HsVar n)                 = transQName n
         transExp (HsApp f a)               = BApp (transExp f) [transExp a]
-        transExp (HsNegApp a)              = BApp (BInl "(-)") [transExp a]
+        transExp (HsNegApp a)              = BApp (BVar "__neg") [transExp a]
         transExp (HsInfixApp a f b)        = BApp (transQName . getHsQOp $ f) [transExp a, transExp b]
         transExp (HsLeftSection a f)       = BApp (transQName . getHsQOp $ f) [transExp a]
         transExp (HsRightSection f a)      = BApp (transQName . getHsQOp $ f) [transExp a]
@@ -227,10 +227,10 @@ fromCore (BModule n is as)
         transModName :: BModuleName -> MName
         transModName = concatWith "_"
 
-        transValueDecl :: BValue -> MGen ()
-        transValueDecl (BValue s a) = do
+        transValueDecl :: BDecl -> MGen ()
+        transValueDecl (BDecl n a) = do
             a' <- transExp True (fixPrimOps a)
-            addGlobal s a'
+            addGlobal n a'
             return ()
 
 
