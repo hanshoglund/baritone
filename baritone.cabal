@@ -13,8 +13,11 @@ library
         base, mtl, semigroups, split, haskell-src, prettify
     hs-source-dirs: src
     exposed-modules:
-        Language.Baritone.Core
         Language.ManuScript
+        Language.Baritone
+        Language.Baritone.Core
+        Language.Baritone.Readers.Haskell
+        Language.Baritone.Writers.ManuScript
 
 executable "baritone"
     hs-source-dirs: src
