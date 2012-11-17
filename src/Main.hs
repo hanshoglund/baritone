@@ -28,7 +28,7 @@ options = [
     (Option ['h'] ["help"]          (NoArg Help)        "Print help and exit"),
     (Option ['v'] ["version"]       (NoArg Version)     "Print version and exit"),
     (Option []    ["include-core"]  (NoArg IncludeCore) "Include core in output"),
-    (Option []    ["core-output"]   (NoArg JustCore)    "Output core only")
+    (Option []    ["output-core"]   (NoArg JustCore)    "Output core only")
   ]
     
 main = do
