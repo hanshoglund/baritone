@@ -25,6 +25,9 @@ toManuScript (BModule n is as)
         (transModName n)
         (foldGlobals . execMGen $ mapM transValueDecl as >> return ())
 
+transModName :: BModuleName -> MName
+transModName = concatWith "_"
+
 -- | Rewrite globals as self._property assignment
 foldGlobals :: [MDecl] -> [MDecl]
 foldGlobals xs = handleGlobals gs ++ ms
@@ -37,9 +40,6 @@ foldGlobals xs = handleGlobals gs ++ ms
         toSelfAssign :: MDecl -> [MStm]
         toSelfAssign (MGlobal n a) = [MAssign (MPropDef MSelf n) a]
 
-transModName :: BModuleName -> MName
-transModName = concatWith "_"
-
 transValueDecl :: BDecl -> MGen ()
 transValueDecl (BDecl n a) = do
     a' <- transExp True (primOps $ a)
@@ -48,6 +48,10 @@ transValueDecl (BDecl n a) = do
 
 
 transExp :: Bool -> BExp -> MGen MExp
+
+transExp _     (BNum a) = return $ MNum a
+transExp _     (BStr s) = return $ MStr s
+
 transExp isTop (BVar n) = do
     let context = if isTop then MSelf else mid ctName
     return $ MVar (MProp context n)
@@ -57,9 +61,17 @@ transExp isTop (BApp f as) = do
     as' <- mapM (transExp isTop) as
     return $ MCall (MVar $ MProp f' apName) as'
 
+transExp isTop (BInl c as) = do
+    as' <- mapM (transExp isTop) as
+    return $ MInl c as'
+
 transExp isTop (BAbs ns a) = do
     let context = if isTop then MSelf else mid ctName
     a' <- transExp False a
+    
+    -- This generated function contains the body of the lambda abstraction
+    -- It transfers all received variables into the current context before
+    -- invoking the actual body. This could be optimized if BVar was aware of its scope
     invoke <- let
         vars = [ctName] ++ ns
         body =
@@ -67,6 +79,9 @@ transExp isTop (BAbs ns a) = do
             ++
             [MReturn a']
         in addUniqueMethod vars body
+    
+    -- This generated function allocates and returns the function object
+    -- It is invoked once, from context containing the lambda abstraction
     create <- let
         vars = [ctName]
         alloc = [
@@ -78,14 +93,8 @@ transExp isTop (BAbs ns a) = do
             MReturn (mid allocName)
             ]
         in addUniqueMethod vars (alloc ++ copy ++ ret)
+    
     return $ MCall (mid create) [context]
-
-transExp isTop (BInl c as) = do
-    as' <- mapM (transExp isTop) as
-    return $ MInl c as'
-
-transExp _ (BNum a)    = return $ MNum a
-transExp _ (BStr s)    = return $ MStr s
 
 
 primOps :: BExp -> BExp
@@ -109,10 +118,6 @@ ctName    = "c"
 allocName = "k"
 apName    = "A"
 
-main :: [MDecl]
-main = [
-        MMethod "Run" [] [MExp $ MCall (MVar $ MProp (mid "main") apName) []]
-    ]
               
 -------------------------------------------------------------------------
 

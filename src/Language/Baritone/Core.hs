@@ -2,7 +2,12 @@
 {-# LANGUAGE StandaloneDeriving #-}
 
 -- |
--- The baritone language is a variant of the lambda calculus with numbers and strings.
+-- The baritone core language is the untyped lambda calculus with numbers and strings.
+--
+-- We also provide an /inline/ form of application, containing backend-specific code in
+-- the target language. This constructor is a variant of application rather than variables,
+-- as the target language may want to poke inside the application mechanism. Transformations
+-- treat inline code as application but does not affect the head.
 --
 module Language.Baritone.Core (
          -- ** Core language
