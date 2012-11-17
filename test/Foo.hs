@@ -45,6 +45,10 @@ __g2 a    = inline ["$[1]", a]
 
 __fix f = (\x -> f (\v -> x x v)) (\x -> f (\v -> x x v))
 
+__nil        = \f g -> f
+__cons x xs  = \f g -> g x xs
+
+
 fix      = __fix
 mkPair   = __c2
 fst      = __g1
@@ -69,7 +73,7 @@ adder a b x = (a*x) + (b*x)
 
 --- Tests
 add23 = adder 2 3
-pair = 555 : 666
+pair = (88,99)
 
 main  = putStrLn `ap` (add23 10)
 main1 = putStrLn `ap` ((comp succ succ) 0)
@@ -85,7 +89,8 @@ cons x xs       = \f g -> g x xs
 
 map = fix (\map_ f xs -> xs (mkNil 0) (\x xs -> (f x `cons` map_ f xs)))
 
-xs = 1 `cons` (2 `cons` (3 `cons` (1 `cons` (2 `cons` (3 `cons` (1 `cons` (2 `cons` (3 `cons` nil))))))))
+-- xs = 1 `cons` (2 `cons` (3 `cons` (1 `cons` (2 `cons` (3 `cons` (1 `cons` (2 `cons` (3 `cons` nil))))))))
+xs = [1,2,3,4,5,6,7,8,9,10]
 main5 = putStrLn (map succ xs)
 
 
@@ -97,8 +102,6 @@ just x  = \n j -> j x
 mapMaybe f v = v (mkNothing 0) (just `comp` f)
 main6 = putStrLn (mapMaybe succ nothing)
 main7 = putStrLn (mapMaybe succ (just 220))
-
-
 
 
 
