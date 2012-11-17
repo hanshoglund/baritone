@@ -17,6 +17,7 @@ data BarOpt
     = Help    
     | Version
     | IncludeCore
+    | JustCore
     deriving (Eq, Show)
 
 version = "baritone"
@@ -26,48 +27,46 @@ header  = "Usage: baritone [options] files...\n" ++
 options = [ 
     (Option ['h'] ["help"]          (NoArg Help)        "Print help and exit"),
     (Option ['v'] ["version"]       (NoArg Version)     "Print version and exit"),
-    (Option []    ["include-core"]  (NoArg IncludeCore) "Include core in output")
+    (Option []    ["include-core"]  (NoArg IncludeCore) "Include core in output"),
+    (Option []    ["core-output"]   (NoArg JustCore)    "Output core only")
   ]
-
-usage = usageInfo header options
     
 main = do
     (opts, args, optErrs) <- getOpt Permute options `fmap` getArgs
 
-    when (Help `elem` opts) $ do
-        putStr (usage ++ "\n")
-        exitWith ExitSuccess
+    let usage = usageInfo header options
+    let printUsage   = putStr (usage ++ "\n") >> exitWith ExitSuccess
+    let printVersion = putStr (version ++ "\n") >> exitWith ExitSuccess
 
-    when (Version `elem` opts) $ do
-        putStr (version ++ "\n")
-        exitWith ExitSuccess
-  
+    when (Help `elem` opts) printUsage
+    when (Version `elem` opts) printVersion  
     runFilter opts
 
 
-
-
-
-
-
-
-
+-- |
+-- Run as a filter from stdin to stdout.
+runFilter :: [BarOpt] -> IO ()
 runFilter opts = compileFile opts stdin stdout
 
 compileFile :: [BarOpt] -> Handle -> Handle -> IO ()
 compileFile opts input output = do
     s <- hGetContents input
+                         
+    let coreToCore = singleApp . singleAbs
     let hs = parse s
-    let b  = transform (singleApp . singleAbs) $ fromHaskell hs
-    let ms = toManuScript b
+    let b  = fromHaskell hs
+    let b' = transform coreToCore b
+    let ms = toManuScript b'
     
-    when (IncludeCore `elem` opts) $ do
+    when (IncludeCore `elem` opts || JustCore `elem` opts) $ do
         hPutStr output $ show (pretty b)
         hPutStr output "\n"
         hPutStr output "\n"
-    
-    hPutStr output $ show (pretty ms)
-    hPutStr output "\n"
+
+    when (not $ JustCore `elem` opts) $ do
+        hPutStr output $ show (pretty ms)
+        hPutStr output "\n"
+        hPutStr output "\n"
     
     return ()
 
