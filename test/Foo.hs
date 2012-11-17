@@ -3,10 +3,6 @@
 
 module Foo.Bar.Baz where
 
--- #ifdef __GLASGOW_HASKELL__
--- #else
--- A comment
--- | This is one.
 __trace a = inline ["trace($)", a]
 __neg a   = inline ["-$", a]
 __add a b = inline ["$ + $", a, b]
@@ -19,26 +15,19 @@ __c2 a b   = inline ["CreateSparseArray($,$)", a, b]
 __g1 a     = inline ["$[0]", a]
 __g2 a     = inline ["$[1]", a]
 
-consPair = __c2
+__fix f = (\x -> f (\v -> x x v)) (\x -> f (\v -> x x v))
+
+fix      = __fix
 fst      = __g1
 snd      = __g2
 putStrLn = __trace
 
-fix f = (\x -> f (\v -> x x v)) (\x -> f (\v -> x x v))
-
--- #endif
 
 
--- -- data List a = Nil | Cons a (List a)
--- #nil      :: List a
--- #cons     :: a -> List a -> List a
--- #caseList :: c -> (a -> List a -> c) -> List a -> c
--- #nil      = \f g -> f
--- #cons x y = \f g -> g x y
--- #caseList f g x = x f g
 
 
--- 
+
+
 one = 1
 two = 2
 name = "hans"
