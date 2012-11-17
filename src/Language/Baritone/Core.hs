@@ -195,7 +195,7 @@ instance Pretty BExp where
     pretty (BStr s)     = string (show s)
     pretty (BVar n)     = string n
     pretty (BAbs ns a)  = (string "\\" <-> hsep (map string ns) <+> string "->") <+> pretty a
-    pretty (BInl s as)  = string "inline" <+> string s <+> hsep (map nestPrettyExpr $ as)
+    pretty (BInl s as)  = string "inline" <+> (brackets . sepByS (string ",")) (string (show s) : map nestPrettyExpr as)
     pretty (BApp f as)  = hsep (map nestPrettyExpr $ f:as)
 
 nestPrettyExpr = f
