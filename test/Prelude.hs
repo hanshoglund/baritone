@@ -1,7 +1,5 @@
 
-{-# LANGUAGE Cpp #-}
-
-module Foo.Bar.Baz where
+module Prelude where
 
 __trace a               = inline ["trace($)", a]
 __asc a                 = inline ["Asc($)", a]
@@ -97,33 +95,4 @@ just x  = \n j -> j x
 mapMaybe f v = v (mkNothing 0) (just `comp` f)
 main6 = putStrLn (mapMaybe succ nothing)
 main7 = putStrLn (mapMaybe succ (just 220))
-
-
-
-
-
-    
--- data Score
--- data Selection
--- data Staff
--- data SystemStaff
--- data Bar
--- data Barline
--- data Tuplet
--- 
--- data BarRest
--- data Clef
--- data TimeSignature
--- data KeySignature
--- data RehearsalMark
--- data InstrumentChange
--- data SymbolItem
--- data NoteRest
--- data Line
--- data Text     
--- data LyricItem
--- data Comment
-
-
-
 
