@@ -40,21 +40,18 @@ transImSpec = notSupported "Import declaration"
 
 transDec :: HsDecl -> BDecl
 transDec (HsPatBind l p a ws) = transPatBind p a ws
-    where
-        transPatBind :: HsPat -> HsRhs -> [HsDecl] -> BDecl
-        transPatBind p a [] = BDecl (transPat p) (transRhs a)
-        transPatBind _ _ _  = notSupported "With clause"
-
 transDec (HsFunBind [HsMatch l n ps a ws]) = translateFunBind n ps a ws
-    where
-        translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BDecl
-        translateFunBind n ps a ws = BDecl (getHsName n) (BAbs (map transPat ps) (transRhs a))
-
 transDec (HsFunBind _) = notSupported "Multiple bindings"
 transDec _             = notSupported "Type, class or instance declaration"
 
 -----------------------------------------------------------------
 
+transPatBind :: HsPat -> HsRhs -> [HsDecl] -> BDecl
+transPatBind p a [] = BDecl (transPat p) (transRhs a)
+transPatBind _ _ _  = notSupported "Where-clause"
+
+translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BDecl
+translateFunBind n ps a ws = BDecl (getHsName n) (BAbs (map transPat ps) (transRhs a))
 
 transPat :: HsPat -> BName
 transPat (HsPVar n) = getHsName n
@@ -77,7 +74,7 @@ transExp (HsApp f a) | isInline f  = transInline a
 transExp (HsNegApp a)              = BApp (BVar "__neg") [transExp a]
 transExp (HsInfixApp a f b)        = BApp (transQName . getHsQOp $ f) [transExp a, transExp b]
 transExp (HsLeftSection a f)       = BApp (transQName . getHsQOp $ f) [transExp a]
-transExp (HsRightSection f a)      = BApp (transQName . getHsQOp $ f) [transExp a]
+transExp (HsRightSection f a)      = BApp (transQName . getHsQOp $ f) [transExp a] -- TODO flip?
 transExp (HsLambda l ps as)        = BAbs (map transPat ps) (transExp as)
 
 -- literals
@@ -117,12 +114,12 @@ transInline _ = error "Inline needs a list of code and arguments"
 
 transQName :: HsQName -> BExp
 transQName (UnQual n)                = BVar (getHsName n)
+transQName (Special HsUnitCon)       = BVar "__unit"
+transQName (Special HsListCon)       = BVar "__empty"
+transQName (Special (HsTupleCon n))  = BVar ("__c" ++ show n)
+transQName (Special HsCons)          = BVar "__c2"
 transQName (Qual m n)                = notSupported "Qualified names"
-transQName (Special HsUnitCon)       = notSupported "Unit constructor"
-transQName (Special HsListCon)       = notSupported "List constructor"
-transQName (Special (HsTupleCon n))  = notSupported "Tuple constructors"
 transQName (Special HsFunCon)        = notSupported "Function type constructor"
-transQName (Special HsCons)          = notSupported "Cons expression"
 
 transLit :: HsLiteral -> BExp
 transLit (HsChar c)     = BStr [c]
