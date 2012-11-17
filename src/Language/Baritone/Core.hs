@@ -155,7 +155,7 @@ singleAbs :: BExp -> BExp
 singleAbs = f
     where
         f (BAbs [n] a)          = BAbs [n] (f a)
-        f (BAbs (n:ns) a)       = BAbs [n] (f $ BAbs ns a)
+        f (BAbs (n:ns) a)       = BAbs [n] (f $ BAbs ns (f a))
         f (BApp a as)           = BApp (f a) (map f as)
         f (BInl c as)           = BInl c (map f as)
         f x                     = x

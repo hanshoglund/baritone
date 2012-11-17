@@ -52,14 +52,14 @@ compileFile :: [BarOpt] -> Handle -> Handle -> IO ()
 compileFile opts input output = do
     s <- hGetContents input
                          
-    let coreToCore = singleApp . singleAbs
+    let coreToCore = singleAbs . singleApp
     let hs = parse s
     let b  = fromHaskell hs
     let b' = transform coreToCore b
     let ms = toManuScript b'
     
     when (IncludeCore `elem` opts || JustCore `elem` opts) $ do
-        hPutStr output $ show (pretty b)
+        hPutStr output $ show (pretty b')
         hPutStr output "\n"
         hPutStr output "\n"
 
