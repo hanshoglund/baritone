@@ -15,7 +15,7 @@ import Language.Baritone.Core
 import Language.Haskell.Syntax
 
 -------------------------------------------------------------------------
--- Haskell to Core
+-- Modules and declarations
 -------------------------------------------------------------------------
 
 -- |
@@ -32,6 +32,7 @@ fromHaskell (HsModule l n es is as)
 transModName :: Module -> BModuleName
 transModName (Module n) = splitOn "." n
 
+-- No Baritone representation for these yet
 transExSpec :: HsExportSpec -> ()
 transExSpec = notSupported "Export list"
 
@@ -39,47 +40,61 @@ transImSpec :: HsImportDecl -> BImp
 transImSpec = notSupported "Import declaration"
 
 transDec :: HsDecl -> BDecl
-transDec (HsPatBind l p a ws) = transPatBind p a ws
+transDec (HsPatBind l p a ws)              = transPatBind p a ws
 transDec (HsFunBind [HsMatch l n ps a ws]) = translateFunBind n ps a ws
-transDec (HsFunBind _) = notSupported "Multiple bindings"
-transDec _             = notSupported "Type, class or instance declaration"
+transDec (HsFunBind _)  = notSupported "Multiple bindings"
+transDec _              = notSupported "Type, class or instance declaration"
 
------------------------------------------------------------------
-
+-- | 
+-- Translate a pattern binding (a.k.a constant definition)
+--
 transPatBind :: HsPat -> HsRhs -> [HsDecl] -> BDecl
 transPatBind p a [] = BDecl (transPat p) (transRhs a)
 transPatBind _ _ _  = notSupported "Where-clause"
 
+-- | 
+-- Translate a single function binding
+--
 translateFunBind :: HsName -> [HsPat] -> HsRhs -> [HsDecl] -> BDecl
-translateFunBind n ps a ws = BDecl (getHsName n) (BAbs (map transPat ps) (transRhs a))
+translateFunBind n ps a [] = BDecl (getHsName n) (BAbs (map transPat ps) (transRhs a))
+translateFunBind _ _  _ _  = notSupported "Where-clause"
+
+-----------------------------------------------------------------
+-- Patterns
+-----------------------------------------------------------------
 
 transPat :: HsPat -> BName
 transPat (HsPVar n) = getHsName n
 transPat _          = notSupported "Pattern matching"
 
+-----------------------------------------------------------------
+-- Guards
+-----------------------------------------------------------------
+
 transRhs :: HsRhs -> BExp
 transRhs (HsUnGuardedRhs a) = transExp a
 transRhs _                  = notSupported "Guards"
 
-
+-----------------------------------------------------------------
+-- Expressions
 -----------------------------------------------------------------
 
 transExp :: HsExp -> BExp
-transExp (HsParen a)               = transExp a
 -- core
+transExp (HsParen a)               = transExp a
 transExp (HsVar n)                 = transQName n
-transExp (HsApp a b)               = if isInline a then transInline b else transApp a b
+transExp (HsApp a b)               = transAppOrInline a b
 transExp (HsNegApp a)              = transNeg a
-transExp (HsInfixApp a f b)        = transOp2 f a b
-transExp (HsLeftSection a f)       = transOp f a
-transExp (HsRightSection f a)      = transOpFlip f a
+transExp (HsInfixApp a f b)        = transBinOp f a b
+transExp (HsLeftSection a f)       = transLeftOp f a
+transExp (HsRightSection f a)      = transRightOp f a
 transExp (HsLambda l ps a)         = transLambda ps a
 -- literals
 transExp (HsLit l)                 = transLit l
 -- special
-transExp (HsCon n)                 = notSupported "Constructors"
-transExp (HsTuple as)              = notSupported "Tuples"
-transExp (HsList as)               = notSupported "Lists"
+transExp (HsCon n)                 = transQName n
+transExp (HsTuple as)              = transTuple as
+transExp (HsList as)               = transList as
 transExp (HsIf p a b)              = notSupported "If-expressions"
 transExp (HsCase p as)             = notSupported "Case-expressions"
 transExp (HsLet ds a)              = notSupported "Let-expressions"
@@ -99,27 +114,15 @@ transExp (HsAsPat n a)             = notSupported "As-patterns"
 transExp (HsWildCard)              = notSupported "Wildcards"
 transExp (HsIrrPat a)              = notSupported "Irrefutable patterns"
 
------------------------------------------------------------------
+-- Inline code                                                     
+-- | 
+--- We overload ordinary application syntax to mean inline as well,
+-- so this function disambigues
+transAppOrInline :: HsExp -> HsExp -> BExp
+transAppOrInline a b 
+    | isInline a = transInline b 
+    | otherwise  = transApp a b
 
-transNeg :: HsExp -> BExp
-transNeg a = BApp (BVar negName) [transExp a]
-
-transApp :: HsExp -> HsExp -> BExp
-transApp a b = BApp (transExp a) [transExp b]
-
-transOp :: HsQOp -> HsExp -> BExp
-transOp f a = BApp (transQName . getHsQOp $ f) [transExp a]
-
-transOpFlip :: HsQOp -> HsExp -> BExp
-transOpFlip f a = BApp (BApp (BVar flipName) [transQName . getHsQOp $ f]) [transExp a]
-
-transOp2 :: HsQOp -> HsExp -> HsExp -> BExp
-transOp2 f a b = BApp (transQName . getHsQOp $ f) [transExp a, transExp b]
-
-transLambda :: [HsPat] -> HsExp -> BExp
-transLambda ps a = BAbs (map transPat ps) (transExp a)
-
--- We overload application to mean inline in case it matches this
 isInline :: HsExp -> Bool
 isInline (HsVar (UnQual (HsIdent "inline"))) = True
 isInline _                                   = False
@@ -128,13 +131,36 @@ transInline :: HsExp -> BExp
 transInline (HsList ((HsLit (HsString c)):as)) = BInl c (map transExp as)
 transInline _ = error "Inline needs a list of code and arguments"
 
+-- Application
+transApp :: HsExp -> HsExp -> BExp
+transApp a b = BApp (transExp a) [transExp b]
+
+transLeftOp :: HsQOp -> HsExp -> BExp
+transLeftOp f a = BApp (transQName . getHsQOp $ f) [transExp a]
+
+transRightOp :: HsQOp -> HsExp -> BExp
+transRightOp f a = BApp (BApp (BVar flipName) [transQName . getHsQOp $ f]) [transExp a]
+
+transBinOp :: HsQOp -> HsExp -> HsExp -> BExp
+transBinOp f a b = BApp (transQName . getHsQOp $ f) [transExp a, transExp b]
+
+transNeg :: HsExp -> BExp
+transNeg a = BApp (BVar negName) [transExp a]
+
+-- Lambdas
+transLambda :: [HsPat] -> HsExp -> BExp
+transLambda ps a = BAbs (map transPat ps) (transExp a)
+
+
+
+-- Names etc
 transQName :: HsQName -> BExp
-transQName (UnQual n)                = BVar (getHsName n)
 transQName (Qual m n)                = notSupported "Qualified names"
+transQName (UnQual n)                = BVar (getHsName n)
 transQName (Special HsUnitCon)       = BVar unitName
-transQName (Special HsListCon)       = BVar emptyName
+transQName (Special HsListCon)       = BVar nilName
 transQName (Special HsFunCon)        = BVar funcName
-transQName (Special HsCons)          = BVar (cName 2)
+transQName (Special HsCons)          = BVar consName
 transQName (Special (HsTupleCon n))  = BVar (cName n)
 
 transLit :: HsLiteral -> BExp
@@ -150,9 +176,19 @@ getHsQOp (HsQConOp n)  = n
 getHsName (HsIdent n)  = n
 getHsName (HsSymbol n) = n
 
+-- Special syntax            
+transTuple :: [HsExp] -> BExp
+transTuple [] = BVar unitName
+transTuple as = BApp (BVar . cName $ length as) (map transExp as)
+
+transList :: [HsExp] -> BExp
+transList []     = BVar nilName
+transList (a:as) = BApp (BVar consName) [transExp a, transList as]
+
 negName     = "__neg"
 unitName    = "__unit"
-emptyName   = "__empty"
+nilName     = "__nil"
+consName    = "__cons"
 funcName    = "__func"
 flipName    = "__flip"
 cName n     = "__c" ++ show n
