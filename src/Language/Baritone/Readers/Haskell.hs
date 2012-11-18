@@ -8,6 +8,7 @@ module Language.Baritone.Readers.Haskell (
 import Control.Monad.Writer hiding ((<>))
 import Control.Monad.State
 import Data.Semigroup
+import Data.Bits
 import Data.List (intersperse, partition, union, (\\))
 import Data.List.Split (splitOn)
 
@@ -136,13 +137,13 @@ transApp :: HsExp -> HsExp -> BExp
 transApp a b = BApp (transExp a) [transExp b]
 
 transLeftOp :: HsQOp -> HsExp -> BExp
-transLeftOp f a = BApp (transQName . getHsQOp $ f) [transExp a]
+transLeftOp f a = BApp (transOp f) [transExp a]
 
 transRightOp :: HsQOp -> HsExp -> BExp
-transRightOp f a = BApp (BApp (BVar flipName) [transQName . getHsQOp $ f]) [transExp a]
+transRightOp f a = BApp (BApp (BVar flipName) [transOp f]) [transExp a]
 
 transBinOp :: HsQOp -> HsExp -> HsExp -> BExp
-transBinOp f a b = BApp (transQName . getHsQOp $ f) [transExp a, transExp b]
+transBinOp f a b = BApp (transOp f) [transExp a, transExp b]
 
 transNeg :: HsExp -> BExp
 transNeg a = BApp (BVar negName) [transExp a]
@@ -154,14 +155,27 @@ transLambda ps a = BAbs (map transPat ps) (transExp a)
 
 
 -- Names etc
+mangle :: String -> String
+mangle = id -- TODO
+
+
 transQName :: HsQName -> BExp
 transQName (Qual m n)                = notSupported "Qualified names"
-transQName (UnQual n)                = BVar (getHsName n)
+transQName (UnQual n)                = BVar (mangle . getHsName $ n)
 transQName (Special HsUnitCon)       = BVar unitName
 transQName (Special HsListCon)       = BVar nilName
 transQName (Special HsFunCon)        = BVar funcName
 transQName (Special HsCons)          = BVar consName
 transQName (Special (HsTupleCon n))  = BVar (cName n)
+
+transOp :: HsQOp -> BExp
+transOp = transQName . getHsQOp
+
+getHsQOp :: HsQOp -> HsQName
+getHsQOp (HsQVarOp n)  = n
+getHsQOp (HsQConOp n)  = n
+getHsName (HsIdent n)  = n
+getHsName (HsSymbol n) = n
 
 transLit :: HsLiteral -> BExp
 transLit (HsChar c)     = BStr [c]
@@ -170,11 +184,6 @@ transLit (HsInt i)	    = BNum (fromIntegral i)
 transLit (HsFrac r)	    = BNum (fromRational r)
 transLit _              = notSupported "Unboxed literals"
 
-getHsQOp :: HsQOp -> HsQName
-getHsQOp (HsQVarOp n)  = n
-getHsQOp (HsQConOp n)  = n
-getHsName (HsIdent n)  = n
-getHsName (HsSymbol n) = n
 
 -- Special syntax            
 transTuple :: [HsExp] -> BExp

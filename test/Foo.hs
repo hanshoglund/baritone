@@ -89,9 +89,9 @@ cons x xs       = \f g -> g x xs
 
 map = fix (\map_ f xs -> xs (mkNil 0) (\x xs -> (f x `cons` map_ f xs)))
 
--- xs = 1 `cons` (2 `cons` (3 `cons` (1 `cons` (2 `cons` (3 `cons` (1 `cons` (2 `cons` (3 `cons` nil))))))))
 xs = [1,2,3,4,5,6,7,8,9,10]
 main5 = putStrLn (map succ xs)
+
 
 
 -- -- Data.Maybe
