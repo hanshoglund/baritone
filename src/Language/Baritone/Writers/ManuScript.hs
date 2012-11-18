@@ -7,6 +7,8 @@ module Language.Baritone.Writers.ManuScript (
 import Control.Monad.Writer hiding ((<>))
 import Control.Monad.State
 import Data.Semigroup
+import Numeric(showHex)
+import Data.Char
 import Data.List (intersperse, partition, union, (\\))
 import Text.Pretty
 
@@ -41,9 +43,10 @@ foldGlobals xs = handleGlobals gs ++ ms
         toSelfAssign (MGlobal n a) = [MAssign (MPropDef MSelf n) a]
 
 transValueDecl :: BDecl -> MGen ()
-transValueDecl (BDecl n a) = do
-    a' <- transExp True (primOps $ a)
-    addGlobal n a'
+transValueDecl (BDecl n a) = do        
+    let coreTransform = mapVar mangle
+    a' <- transExp True (coreTransform a)
+    addGlobal (mangle n) a'
     return ()
 
 
@@ -97,27 +100,35 @@ transExp isTop (BAbs ns a) = do
     return $ MCall (mid create) [context]
 
 
-primOps :: BExp -> BExp
-primOps (BVar f)    = (BVar $ primOp f)
-primOps (BApp f as) = BApp (primOps f) (map primOps as)
-primOps (BAbs ns a) = BAbs ns (primOps a)
-primOps x           = x
+mapVar :: (String -> String) -> BExp -> BExp
+mapVar f (BVar a)    = (BVar $ f a)
+mapVar f (BApp a as) = BApp (mapVar f a) (map (mapVar f) as)
+mapVar f (BInl c as) = BInl c (map (mapVar f) as)
+mapVar f (BAbs ns a) = BAbs ns (mapVar f a)
+mapVar f x           = x
 
-primOp :: BName -> BName
-primOp "(+)" = "__add"
-primOp "(-)" = "__sub"
-primOp "(*)" = "__mul"
-primOp "(/)" = "__div"
-primOp "+"   = "__add"
-primOp "-"   = "__sub"
-primOp "*"   = "__mul"
-primOp "/"   = "__div"
-primOp x     = x
+
+-- primOp :: BName -> BName
+-- primOp "(+)" = "__add"
+-- primOp "(-)" = "__sub"
+-- primOp "(*)" = "__mul"
+-- primOp "(/)" = "__div"
+-- primOp "+"   = "__add"
+-- primOp "-"   = "__sub"
+-- primOp "*"   = "__mul"
+-- primOp "/"   = "__div"
+-- primOp x     = x
 
 ctName    = "c"
 allocName = "k"
 apName    = "A"
-
+  
+mangle :: String -> String
+mangle = concatMap f
+    where                
+        isVarLetter c = isAlphaNum c || c == '_'
+        f c | isVarLetter c = [c]
+            | otherwise    = "__" ++ showHex (ord c) "" ++ "__"
               
 -------------------------------------------------------------------------
 

@@ -8,7 +8,6 @@ module Language.Baritone.Readers.Haskell (
 import Control.Monad.Writer hiding ((<>))
 import Control.Monad.State
 import Data.Semigroup
-import Data.Bits
 import Data.List (intersperse, partition, union, (\\))
 import Data.List.Split (splitOn)
 
@@ -83,7 +82,7 @@ transRhs _                  = notSupported "Guards"
 transExp :: HsExp -> BExp
 -- core
 transExp (HsParen a)               = transExp a
-transExp (HsVar n)                 = transQName n
+transExp (HsVar n)                 = transName n
 transExp (HsApp a b)               = transAppOrInline a b
 transExp (HsNegApp a)              = transNeg a
 transExp (HsInfixApp a f b)        = transBinOp f a b
@@ -93,7 +92,7 @@ transExp (HsLambda l ps a)         = transLambda ps a
 -- literals
 transExp (HsLit l)                 = transLit l
 -- special
-transExp (HsCon n)                 = transQName n
+transExp (HsCon n)                 = transName n
 transExp (HsTuple as)              = transTuple as
 transExp (HsList as)               = transList as
 transExp (HsIf p a b)              = notSupported "If-expressions"
@@ -153,25 +152,27 @@ transLambda :: [HsPat] -> HsExp -> BExp
 transLambda ps a = BAbs (map transPat ps) (transExp a)
 
 
-
--- Names etc
-mangle :: String -> String
-mangle = id -- TODO
-
-
-transQName :: HsQName -> BExp
-transQName (Qual m n)                = notSupported "Qualified names"
-transQName (UnQual n)                = BVar (mangle . getHsName $ n)
-transQName (Special HsUnitCon)       = BVar unitName
-transQName (Special HsListCon)       = BVar nilName
-transQName (Special HsFunCon)        = BVar funcName
-transQName (Special HsCons)          = BVar consName
-transQName (Special (HsTupleCon n))  = BVar (cName n)
+transName :: HsQName -> BExp
+transName (Qual m n)                = notSupported "Qualified names"
+transName (UnQual n)                = BVar (getHsName $ n)
+transName (Special HsUnitCon)       = BVar unitName
+transName (Special HsListCon)       = BVar nilName
+transName (Special HsFunCon)        = BVar funcName
+transName (Special HsCons)          = BVar consName
+transName (Special (HsTupleCon n))  = BVar (cName n)
 
 transOp :: HsQOp -> BExp
-transOp = transQName . getHsQOp
+transOp = transName . getHsQOp
 
-getHsQOp :: HsQOp -> HsQName
+-- mapHsQName :: (String -> String) -> HsQName -> HsQName
+-- mapHsQName f (Qual m n) = Qual m (mapHsName f n)
+-- mapHsQName f (UnQual n) = UnQual (mapHsName f n)
+-- mapHsQName f (Special n) = (Special n)
+-- 
+-- mapHsName :: (String -> String) -> HsName -> HsName
+-- mapHsName f (HsIdent n)  = HsIdent (f n)
+-- mapHsName f (HsSymbol n) = HsSymbol (f n)
+
 getHsQOp (HsQVarOp n)  = n
 getHsQOp (HsQConOp n)  = n
 getHsName (HsIdent n)  = n
