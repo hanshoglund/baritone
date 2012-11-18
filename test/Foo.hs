@@ -64,6 +64,8 @@ mod  = __mod
 (==) = __eq
 (/=) = __ne
 
+error = __error
+
 fix      = __fix
 fst      = __g1
 snd      = __g2
@@ -80,12 +82,10 @@ succ x      = x + 1
 
 
 
-
-
-
 --------------------------------------------------------------------------------
 -- Tests
 --------------------------------------------------------------------------------
+
 
 adder a b x = (a*x) + (b*x)
 add23 = adder 2 3
@@ -101,8 +101,9 @@ main4 = putStrLn $ "This is amazing!"
 
 -- Data.List
 
-mkNil dummy = \f g -> f
-nil       = \f g -> f
+-- data List a = Nil | Cons a (List a)
+
+mkNil d   = \f g -> f
 cons x xs = \f g -> g x xs
 
 map = fix (\map_ f xs -> xs (mkNil 0) (\x xs -> (f x : map_ f xs)))
@@ -114,17 +115,27 @@ main5 = putStrLn (map succ xs)
 
 -- Data.Maybe
 
-mkNothing dummy = \n j -> n
-nothing = \n j -> n
-just x  = \n j -> j x
+-- data Maybe a = Nothing | Just a
+mkNothing d = \n j -> n
+just x      = \n j -> j x
 
 mapMaybe f v = v (mkNothing 0) (just . f)
-main6 = putStrLn (mapMaybe succ nothing)
+main6 = putStrLn (mapMaybe succ (mkNothing 0))
 main7 = putStrLn (mapMaybe succ (just 220))
 
-main10 = 1 + 2
 
 
+main11 = putStrLn $ id id 2
+
+
+
+-- foo f (Bar x y) = a x y
+-- foo f (Baz x y) = b x y
+-- 
+-- foo _1 _2 = case (_1,_2) of
+--     f _3 -> _3 (\x y -> a x y)
+--     f _4 -> _4 (\x y -> b x y)
+    
 
 
 
