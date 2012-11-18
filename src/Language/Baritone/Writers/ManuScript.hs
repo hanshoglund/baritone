@@ -107,18 +107,6 @@ mapVar f (BInl c as) = BInl c (map (mapVar f) as)
 mapVar f (BAbs ns a) = BAbs ns (mapVar f a)
 mapVar f x           = x
 
-
--- primOp :: BName -> BName
--- primOp "(+)" = "__add"
--- primOp "(-)" = "__sub"
--- primOp "(*)" = "__mul"
--- primOp "(/)" = "__div"
--- primOp "+"   = "__add"
--- primOp "-"   = "__sub"
--- primOp "*"   = "__mul"
--- primOp "/"   = "__div"
--- primOp x     = x
-
 ctName    = "c"
 allocName = "k"
 apName    = "A"
@@ -129,6 +117,21 @@ mangle = concatMap f
         isVarLetter c = isAlphaNum c || c == '_'
         f c | isVarLetter c = [c]
             | otherwise    = "__" ++ showHex (ord c) "" ++ "__"
+
+-- Primitive foldl
+-- __foldl "(c, f, z, coll) {     
+--         r = z;
+--         for each x in xs {
+--             z = f.A(z).A(x);
+--         }
+--         return r;
+--     }"
+
+-- Primitive run
+-- Run "() {
+--         Self.run.A(null);
+--     }"
+
               
 -------------------------------------------------------------------------
 
