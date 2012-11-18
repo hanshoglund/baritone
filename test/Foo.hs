@@ -77,7 +77,6 @@ f . g         = \x -> f (g x)
 
 pred x      = x - 1
 succ x      = x + 1
-adder a b x = (a*x) + (b*x)
 
 
 
@@ -88,13 +87,15 @@ adder a b x = (a*x) + (b*x)
 -- Tests
 --------------------------------------------------------------------------------
 
+adder a b x = (a*x) + (b*x)
 add23 = adder 2 3
-pair = (88,99)
-
 main  = putStrLn $ (add23 10)
-main1 = putStrLn $ ((succ . succ) 0)
-main2 = putStrLn $ (fst pair)
-main3 = putStrLn $ (snd pair)
+
+pair = (88,99)
+main1 = putStrLn $ (succ . succ) 0
+main2 = putStrLn $ fst pair
+main3 = putStrLn $ snd pair
+
 main4 = putStrLn $ "This is amazing!"
 
 
