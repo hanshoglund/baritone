@@ -1,7 +1,7 @@
 
 {-# LANGUAGE Cpp #-}
 
-module Foo.Bar.Baz where
+module Foo where
 
 __trace a               = inline ["trace($)", a]
 __asc a                 = inline ["Asc($)", a]
@@ -48,18 +48,32 @@ __fix f = (\x -> f (\v -> x x v)) (\x -> f (\v -> x x v))
 __nil        = \f g -> f
 __cons x xs  = \f g -> g x xs
 
+--------------------------------------------------------------------------------
+-- Prelude
+--------------------------------------------------------------------------------
+
+(+)  = __add
+(-)  = __sub
+(*)  = __mul
+(/)  = __div
+mod  = __mod
+(<)  = __lt
+(<=) = __le
+(>)  = __gt
+(>=) = __ge
+(==) = __eq
+(/=) = __ne
 
 fix      = __fix
-mkPair   = __c2
 fst      = __g1
 snd      = __g2
 putStrLn = __trace
 
-ap f x        = f x
+f $ x         = f x
 id x          = x
 const x y     = x
 const2 x y z  = x
-comp f g x = f (g x)
+f . g         = \x -> f (g x)
 
 pred x      = x - 1
 succ x      = x + 1
@@ -70,38 +84,47 @@ adder a b x = (a*x) + (b*x)
 
 
 
+--------------------------------------------------------------------------------
+-- Tests
+--------------------------------------------------------------------------------
 
---- Tests
 add23 = adder 2 3
 pair = (88,99)
 
-main  = putStrLn `ap` (add23 10)
-main1 = putStrLn `ap` ((comp succ succ) 0)
-main2 = putStrLn `ap` (fst pair)
-main3 = putStrLn `ap` (snd pair)
-main4 = putStrLn `ap` "This is amazing!"
+main  = putStrLn $ (add23 10)
+main1 = putStrLn $ ((succ . succ) 0)
+main2 = putStrLn $ (fst pair)
+main3 = putStrLn $ (snd pair)
+main4 = putStrLn $ "This is amazing!"
 
 
--- -- Data.List
+-- Data.List
+
 mkNil dummy     = \f g -> f
 nil             = \f g -> f
 cons x xs       = \f g -> g x xs
 
-map = fix (\map_ f xs -> xs (mkNil 0) (\x xs -> (f x `cons` map_ f xs)))
+map = fix (\map_ f xs -> xs (mkNil 0) (\x xs -> (f x : map_ f xs)))
 
 xs = [1,2,3,4,5,6,7,8,9,10]
 main5 = putStrLn (map succ xs)
 
 
 
--- -- Data.Maybe
+-- Data.Maybe
+
 mkNothing dummy = \n j -> n
 nothing = \n j -> n
 just x  = \n j -> j x
 
-mapMaybe f v = v (mkNothing 0) (just `comp` f)
+mapMaybe f v = v (mkNothing 0) (just . f)
 main6 = putStrLn (mapMaybe succ nothing)
 main7 = putStrLn (mapMaybe succ (just 220))
+
+main10 = 1 + 2
+
+
+
 
 
 
