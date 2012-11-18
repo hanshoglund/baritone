@@ -89,7 +89,7 @@ succ x      = x + 1
 
 adder a b x = (a*x) + (b*x)
 add23 = adder 2 3
-main  = putStrLn $ (add23 10)
+main  = putStrLn $ add23 10
 
 pair = (88,99)
 main1 = putStrLn $ (succ . succ) 0
@@ -101,9 +101,9 @@ main4 = putStrLn $ "This is amazing!"
 
 -- Data.List
 
-mkNil dummy     = \f g -> f
-nil             = \f g -> f
-cons x xs       = \f g -> g x xs
+mkNil dummy = \f g -> f
+nil       = \f g -> f
+cons x xs = \f g -> g x xs
 
 map = fix (\map_ f xs -> xs (mkNil 0) (\x xs -> (f x : map_ f xs)))
 
