@@ -115,8 +115,8 @@ transExp (HsWildCard)              = notSupported "Wildcards"
 transExp (HsIrrPat a)              = notSupported "Irrefutable patterns"
 
 -- Inline code                                                     
--- | 
---- We overload ordinary application syntax to mean inline as well,
+
+-- | We overload ordinary application syntax to mean inline as well,
 -- so this function disambigues
 transAppOrInline :: HsExp -> HsExp -> BExp
 transAppOrInline a b 
@@ -124,14 +124,16 @@ transAppOrInline a b
     | otherwise  = transApp a b
 
 isInline :: HsExp -> Bool
-isInline (HsVar (UnQual (HsIdent "inline"))) = True
-isInline _                                   = False
+isInline (HsVar (UnQual (HsIdent kw))) = (kw == inlineKeyword)
+isInline _ = False
 
 transInline :: HsExp -> BExp
 transInline (HsList ((HsLit (HsString c)):as)) = BInl c (map transExp as)
 transInline _ = error "Inline needs a list of code and arguments"
 
+
 -- Application
+
 transApp :: HsExp -> HsExp -> BExp
 transApp a b = BApp (transExp a) [transExp b]
 
@@ -148,10 +150,15 @@ transNeg :: HsExp -> BExp
 transNeg a = BApp (BVar negName) [transExp a]
 
 -- Lambdas
+
 transLambda :: [HsPat] -> HsExp -> BExp
 transLambda ps a = BAbs (map transPat ps) (transExp a)
 
-
+-- | Translate a variable name                   
+--
+-- Note that operators are rendered verbatim, i.e. both @1 + 2@ and @(+) 1 2@
+-- gives @+@ as the name of the applied function.
+--
 transName :: HsQName -> BExp
 transName (Qual m n)                = notSupported "Qualified names"
 transName (UnQual n)                = BVar (getHsName $ n)
@@ -186,7 +193,8 @@ transLit (HsFrac r)	    = BNum (fromRational r)
 transLit _              = notSupported "Unboxed literals"
 
 
--- Special syntax            
+-- Special constructors            
+
 transTuple :: [HsExp] -> BExp
 transTuple [] = BVar unitName
 transTuple as = BApp (BVar . cName $ length as) (map transExp as)
@@ -195,15 +203,80 @@ transList :: [HsExp] -> BExp
 transList []     = BVar nilName
 transList (a:as) = BApp (BVar consName) [transExp a, transList as]
 
-negName     = "__neg"
-unitName    = "__unit"
-nilName     = "__nil"
-consName    = "__cons"
-funcName    = "__func"
-flipName    = "__flip"
-cName n     = "__c" ++ show n
 
+-----------------------------------------------------------------
+-- Data constructors
+-----------------------------------------------------------------
+
+-- | Only the HsDataDecl constructor
+type HsData = HsDecl
+
+-- | Generates the destructor function for an algebraic type.
+--
+-- The destruction function receives a matching clause for each constructor and finally
+-- the actual value, for example @__maybe :: b -> (a -> b) -> Maybe a -> b@
+--
+makeDest :: HsData -> BDecl
+makeDest (HsDataDecl l c n vs cs ds) 
+    = BDecl name expr    
+    where
+        -- The name is __T for data type t etc.
+        name = "__" ++ getHsName n
+
+        -- As each data type /is/ its destructor we simply shuffle the arguments:
+        --
+        -- > __T d1 d2 ... dN a = a d1 d2 ... dN
+        --
+        -- Empty data declarations can not be destructed, so their destructor is undefined.
+        num  = length cs
+        ns   = map (\i -> "d" ++ show i) [1..num]
+        expr = BAbs (ns ++ ["a"]) (BApp (BVar "a") (map BVar ns))
+
+
+-- | Generates the constructor functions for an algebraic type.
+-- Each constructor receives all matching clauses and invoke the correct one, for example
+-- @__Just :: b -> (a -> b)
+makeCons :: HsData -> [BDecl]
+makeCons (HsDataDecl l c n vs cs ds) = 
+    mapIndexed (\i c -> BDecl ("__" ++ getHsName n) $ makeSingleCons (length cs) i (conDeclNumArgs c)) cs
+    where
+        -- The name is __Nothing, __Just etc.
+
+        makeSingleCons :: Int -> Int -> Int -> BExp
+        makeSingleCons numClauses clauseIndex numArgs
+            = BAbs (args ++ clauses) body -- FIXME if args is empty?
+            where
+                args    = map (\i -> "a" ++ show i) [1..numArgs]    -- may be empty
+                clauses = map (\i -> "c" ++ show i) [1..numClauses]
+                clause  = clauses !! clauseIndex
+                body | length args <= 0 = BVar clause
+                     | otherwise        = BApp (BVar clause) (map BVar args)
+
+conDeclNumArgs :: HsConDecl -> Int
+conDeclNumArgs (HsConDecl l n as) = length as
+conDeclNumArgs (HsRecDecl l n fs) = length fs
+
+-----------------------------------------------------------------
+-- Names
+-----------------------------------------------------------------
+
+inlineKeyword = "inline"
+negName       = "__neg"
+unitName      = "__unit"
+nilName       = "__nil"
+consName      = "__cons"
+funcName      = "__func"
+flipName      = "__flip"
+cName n       = "__c" ++ show n
 
 -----------------------------------------------------------------
 
 notSupported m = error $ "Unsupported Haskell feature: " ++ m
+
+mapIndexed :: (Int -> a -> b) -> [a] -> [b]
+mapIndexed f as = map (uncurry f) (zip is as)
+    where
+        n  = length as - 1
+        is = [0..n]
+
+

@@ -42,6 +42,10 @@ import Language.ManuScript
 import Text.Pretty
 
 
+-------------------------------------------------------------------------
+-- Core language
+-------------------------------------------------------------------------
+
 data BModule = BModule BModuleName [BImp] [BDecl] -- ^ /name imports declarations/
     deriving (Eq, Show)
 
@@ -57,9 +61,9 @@ data BDecl = BDecl String BExp
 
 data BExp
     = BVar BName         -- ^ /name/
-    | BApp BExp [BExp]   -- ^ /function arguments+/
-    | BAbs [BName] BExp  -- ^ /bindings+ body/
-    | BInl String [BExp] -- ^ /code expressions+/
+    | BApp BExp [BExp]   -- ^ /function argument+/
+    | BInl String [BExp] -- ^ /code argument+/
+    | BAbs [BName] BExp  -- ^ /binding+ body/
     | BNum Double
     | BStr String
     deriving (Eq, Show)
@@ -82,6 +86,26 @@ freeVars _           = []
 isFreeIn :: BName -> BExp -> Bool
 isFreeIn n a = elem n (freeVars a)
 
+-------------------------------------------------------------------------
+-- Derived forms
+-------------------------------------------------------------------------
+
+-- | Let-expression
+-- 
+-- /(binding argument)+ body/
+-- 
+bLet :: [(BName, BExp)] -> BExp -> BExp
+bLet = undefined
+
+-- | Case-expression
+-- 
+-- /argument (matcher)+/
+-- 
+bCase :: BExp -> [BExp]
+bCase = undefined
+
+-------------------------------------------------------------------------
+-- Core to core transformations
 -------------------------------------------------------------------------
 
 -- | 
@@ -173,6 +197,8 @@ transform f (BModule n is ds) = BModule n is (map (t f) ds)
         t f (BDecl n d) = BDecl n (f d)
 
 
+-------------------------------------------------------------------------
+-- Printing
 -------------------------------------------------------------------------
 
 -- | The 'Pretty' instance generates valid Haskell for all Baritone language constructs.

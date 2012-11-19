@@ -107,9 +107,9 @@ mapVar f (BInl c as) = BInl c (map (mapVar f) as)
 mapVar f (BAbs ns a) = BAbs ns (mapVar f a)
 mapVar f x           = x
 
-ctName    = "c"
-allocName = "k"
-apName    = "A"
+ctName    = "_c_"
+allocName = "_k_"
+apName    = "_a_"
   
 mangle :: String -> String
 mangle = concatMap f
