@@ -101,41 +101,23 @@ main4 = putStrLn $ "This is amazing!"
 
 -- Data.List
 
--- data List a = Nil | Cons a (List a)
-
-mkNil d   = \f g -> f
-cons x xs = \f g -> g x xs
-
-map = fix (\map_ f xs -> xs (mkNil 0) (\x xs -> (f x : map_ f xs)))
+data List a = Nil | Cons a (List a)
+map = fix (\map f xs -> list Nil (\x xs -> (f x `Cons` map f xs)) xs)
 
 xs = [1,2,3,4,5,6,7,8,9,10]
 main5 = putStrLn (map succ xs)
 
 
 
+
 -- Data.Maybe
 
--- data Maybe a = Nothing | Just a
-mkNothing d = \n j -> n
-just x      = \n j -> j x
+data Maybe a = Nothing | Just a
+mkNothing d = \n j -> n -- Workaround of #5
 
-mapMaybe f v = v (mkNothing 0) (just . f)
-main6 = putStrLn (mapMaybe succ (mkNothing 0))
-main7 = putStrLn (mapMaybe succ (just 220))
-
-
-
-main11 = putStrLn $ id id 2
-
-
-
--- foo f (Bar x y) = a x y
--- foo f (Baz x y) = b x y
--- 
--- foo _1 _2 = case (_1,_2) of
---     f _3 -> _3 (\x y -> a x y)
---     f _4 -> _4 (\x y -> b x y)
-    
+mapMaybe f = maybe (mkNothing 0) (Just . f)
+main6 = putStrLn (mapMaybe succ Nothing)
+main7 = putStrLn (mapMaybe succ (Just 220))
 
 
 
