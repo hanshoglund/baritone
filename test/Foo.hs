@@ -3,6 +3,8 @@
 
 module Foo where
 
+__false                 = inline ["false"]
+__true                  = inline ["true"]
 __trace a               = inline ["trace($)", a]
 __asc a                 = inline ["Asc($)", a]
 __chr a                 = inline ["Chr($)", a]
@@ -10,7 +12,7 @@ __charAt n s            = inline ["CharAt($,$)", s, n]
 __isObject a            = inline ["IsObject($)", a]
 __isValid a             = inline ["IsValid($)", a]
 __joinStrings p xs      = inline ["JoinStrings($,$)", xs, p]
--- __splitString p s       = inline ["SplitString($,$)", s, p, True] -- TODO
+__splitString p s       = inline ["SplitString($,$)", s, p, __true]
 __lenght a              = inline ["Length($)", a]
 __round a               = inline ["Round($)", a]
 __floor a               = inline ["RoundUp($)", a]
@@ -80,6 +82,21 @@ f . g         = \x -> f (g x)
 pred x      = x - 1
 succ x      = x + 1
 
+-- Data.Bool
+
+data Bool = True | False
+
+-- Data.List
+
+data List a = Nil | Cons a (List a)
+map = fix (\map f xs -> list Nil (\x xs -> (f x `Cons` map f xs)) xs)
+
+-- Data.Maybe
+
+data Maybe a = Nothing | Just a
+mkNothing d = \n j -> n -- Workaround of #5
+
+mapMaybe f = maybe (mkNothing 0) (Just . f)
 
 
 --------------------------------------------------------------------------------
@@ -98,28 +115,11 @@ main3 = putStrLn $ snd pair
 
 main4 = putStrLn $ "This is amazing!"
 
-
--- Data.List
-
-data List a = Nil | Cons a (List a)
-map = fix (\map f xs -> list Nil (\x xs -> (f x `Cons` map f xs)) xs)
-
 xs = [1,2,3,4,5,6,7,8,9,10]
 main5 = putStrLn (map succ xs)
 
-
-
-
--- Data.Maybe
-
-data Maybe a = Nothing | Just a
-mkNothing d = \n j -> n -- Workaround of #5
-
-mapMaybe f = maybe (mkNothing 0) (Just . f)
 main6 = putStrLn (mapMaybe succ Nothing)
 main7 = putStrLn (mapMaybe succ (Just 220))
-
-
 
 
     
