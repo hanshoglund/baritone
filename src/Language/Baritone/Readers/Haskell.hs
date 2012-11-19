@@ -8,6 +8,7 @@ module Language.Baritone.Readers.Haskell (
 import Control.Monad.Writer hiding ((<>))
 import Control.Monad.State
 import Data.Semigroup
+import Data.Char(toUpper, toLower)
 import Data.List (intersperse, partition, union, (\\))
 import Data.List.Split (splitOn)
 
@@ -27,7 +28,7 @@ fromHaskell (HsModule l n es is as)
     where
         handleName          = transModName
         handleImports       = map transImSpec
-        handleDeclarations  = map transDec
+        handleDeclarations  = concatMap transDec
 
 transModName :: Module -> BModuleName
 transModName (Module n) = splitOn "." n
@@ -39,11 +40,12 @@ transExSpec = notSupported "Export list"
 transImSpec :: HsImportDecl -> BImp
 transImSpec = notSupported "Import declaration"
 
-transDec :: HsDecl -> BDecl
-transDec (HsPatBind l p a ws)              = transPatBind p a ws
-transDec (HsFunBind [HsMatch l n ps a ws]) = translateFunBind n ps a ws
-transDec (HsFunBind _)  = notSupported "Multiple bindings"
-transDec _              = notSupported "Type, class or instance declaration"
+transDec :: HsDecl -> [BDecl]
+transDec d@(HsDataDecl l c n vs cs ds)       = transDataDecl d
+transDec d@(HsPatBind l p a ws)              = [transPatBind p a ws]
+transDec d@(HsFunBind [HsMatch l n ps a ws]) = [translateFunBind n ps a ws]
+transDec d@(HsFunBind _)  = notSupported "Multiple bindings"
+transDec _                = notSupported "Type, class or instance declaration"
 
 -- | 
 -- Translate a pattern binding (a.k.a constant definition)
@@ -211,6 +213,9 @@ transList (a:as) = BApp (BVar consName) [transExp a, transList as]
 -- | Only the HsDataDecl constructor
 type HsData = HsDecl
 
+transDataDecl :: HsData -> [BDecl]
+transDataDecl d = [makeDest d] ++ makeCons d
+
 -- | Generates the destructor function for an algebraic type.
 --
 -- The destruction function receives a matching clause for each constructor and finally
@@ -220,8 +225,8 @@ makeDest :: HsData -> BDecl
 makeDest (HsDataDecl l c n vs cs ds) 
     = BDecl name expr    
     where
-        -- The name is __T for data type t etc.
-        name = "__" ++ getHsName n
+        -- The name is t for data type T
+        name = (firstToLower $ getHsName n)
 
         -- As each data type /is/ its destructor we simply shuffle the arguments:
         --
@@ -238,10 +243,10 @@ makeDest (HsDataDecl l c n vs cs ds)
 -- @__Just :: b -> (a -> b)
 makeCons :: HsData -> [BDecl]
 makeCons (HsDataDecl l c n vs cs ds) = 
-    mapIndexed (\i c -> BDecl ("__" ++ getHsName n) $ makeSingleCons (length cs) i (conDeclNumArgs c)) cs
+    mapIndexed (\i c -> BDecl ({-"__" ++ -}getHsName (conDeclName c)) $ makeSingleCons (length cs) i (conDeclNumArgs c)) cs
     where
-        -- The name is __Nothing, __Just etc.
-
+        -- The name is the name of the constructor
+        
         makeSingleCons :: Int -> Int -> Int -> BExp
         makeSingleCons numClauses clauseIndex numArgs
             = BAbs (args ++ clauses) body -- FIXME if args is empty?
@@ -252,6 +257,9 @@ makeCons (HsDataDecl l c n vs cs ds) =
                 body | length args <= 0 = BVar clause
                      | otherwise        = BApp (BVar clause) (map BVar args)
 
+conDeclName :: HsConDecl -> HsName
+conDeclName (HsConDecl l n as) = n
+conDeclName (HsRecDecl l n fs) = n
 conDeclNumArgs :: HsConDecl -> Int
 conDeclNumArgs (HsConDecl l n as) = length as
 conDeclNumArgs (HsRecDecl l n fs) = length fs
@@ -272,6 +280,14 @@ cName n       = "__c" ++ show n
 -----------------------------------------------------------------
 
 notSupported m = error $ "Unsupported Haskell feature: " ++ m
+
+firstToUpper :: String -> String
+firstToUpper []     = []
+firstToUpper (c:cs) = toUpper c : cs
+
+firstToLower :: String -> String
+firstToLower []     = []
+firstToLower (c:cs) = toLower c : cs
 
 mapIndexed :: (Int -> a -> b) -> [a] -> [b]
 mapIndexed f as = map (uncurry f) (zip is as)
