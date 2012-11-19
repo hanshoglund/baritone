@@ -89,7 +89,7 @@ data Bool = True | False
 -- Data.List
 
 data List a = Nil | Cons a (List a)
-map = fix (\map f xs -> list Nil (\x xs -> (f x `Cons` map f xs)) xs)
+map = fix (\map f xs -> list Nil (\x xs -> (f x : map f xs)) xs)
 
 -- Data.Maybe
 
